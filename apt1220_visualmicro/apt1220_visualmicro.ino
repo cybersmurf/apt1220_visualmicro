@@ -132,10 +132,10 @@ static bool eth_connected = false;
 static int  runCounter = 0;
 
 // Nastavení WiFi a TCP
-//const char* ssid = "AGERIT_AC 2GHz";
-//const char* password = "AGERITagerit512";
-static char* ssid = "blackies";
-static char* password = "Blackies105111";
+static char* ssid = "AGERIT_AC 2GHz";
+static char* password = "AGERITagerit512";
+//static char* ssid = "blackies";
+//static char* password = "Blackies105111";
 const char* serverIP = "192.168.225.221";
 const int serverPort = 54321;
 
@@ -347,6 +347,9 @@ boolean load_config() {
     useWifi = preferences.getBool("useWifi", false);
     useETH = preferences.getBool("useETH", true);
 
+    sprintf(ssid, preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
+    sprintf(password, preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
+
     ping_timeout = 4;
     preferences.end();
     return true;
@@ -385,6 +388,9 @@ boolean save_config() {
 
     preferences.putBool("useWifi", useWifi);
     preferences.putBool("useETH", useETH);
+
+    preferences.putString("SSID_NAME", ssid);
+    preferences.putString("SSID_PASS", password);
 
     preferences.end();
     return true;
