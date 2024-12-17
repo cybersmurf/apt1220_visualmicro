@@ -68,7 +68,7 @@ HardwareSerial SerialD(2); // Pro SerialD
 #define IF_UP			 2
 #define IF_COMING_DOWN	 3
 
-#define RTC_YEAR_OFFSET  1900
+#define RTC_YEAR_OFFSET  1870
 
 //static int __attribute__((section(".noinit"))) loaded_default = 0;
 static int loaded_default = 0;
@@ -132,8 +132,8 @@ static bool eth_connected = false;
 static int  runCounter = 0;
 
 // Nastavení WiFi a TCP
-static char* ssid = "AGERIT_AC 2GHz";
-static char* password = "AGERITagerit512";
+static char ssid[32] = "AGERIT_AC 2GHz";
+static char password[32] = "AGERITagerit512";
 //static char* ssid = "blackies";
 //static char* password = "Blackies105111";
 const char* serverIP = "192.168.225.221";
@@ -193,7 +193,7 @@ void reset_buffer_file() {
 void setup() {
     Serial.begin(115200);
 
-    delay(500);
+    delay(2000);
 
     Wire.begin();
     delay(100);
@@ -216,6 +216,8 @@ void setup() {
     delay(100);
 
     //if (loaded_default!=1) { set_default(); save_config();}
+    Serial.println("Load config ...");
+    delay(2000);
     boolean confiLoaded = load_config();
     delay(100);
 
@@ -323,7 +325,7 @@ void fast_clear_disp() {
 
 void blank_line(int line) {
     lcd2.setCursor(0, line);                       // Umístí kurzor na zaèátek øádku
-    lcd2.printf("                    ");       // Vypíše prázdný øetìzec o 20 mezerách
+    lcd2.printf("                    ");           // Vypíše prázdný øetìzec o 20 mezerách
     lcd2.setCursor(0, line);                       // Umístí kurzor zpìt na zaèátek øádku
 }
 
@@ -988,9 +990,14 @@ void logToSerial(const String vMessage, int pLogLevel) {
 
 void connectToWiFi() {
     WiFi.begin(ssid, password);
+
+    int retryAttemp = 0;
+
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
+        ++retryAttemp;
+        if (retryAttemp > 4) { return; }
     }
     Serial.println("WiFi connected");
 }
@@ -1000,7 +1007,8 @@ void connectToServer() {
         //net_on = 1;
         setNetOn(1, 12);
 
-        SEC_TIMER = rtc2.getEpoch();
+        //SEC_TIMER = rtc2.getEpoch();
+        SEC_TIMER = millis() / 1000;
         //SEC_TIMER = rtc2.now().unixtime();
 
         last_ping = SEC_TIMER;
@@ -1148,8 +1156,10 @@ void tLAST_PINGcode(void* parameter) {
 void tSEC_TIMERcode(void* parameter) {
     for (;;) {
 
-        SEC_TIMER = rtc2.getEpoch();
+        //SEC_TIMER = rtc2.getEpoch();
         //SEC_TIMER = rtc2.now().unixtime();
+
+        SEC_TIMER = millis() / 1000;
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
@@ -1192,8 +1202,10 @@ void TCP() {
         delay(5);
         if (client.connect(serverIP, serverPort)) {  // Zmìòte na IP serveru a port
 
-            SEC_TIMER = rtc2.getEpoch();
+            //SEC_TIMER = rtc2.getEpoch();
             //SEC_TIMER = rtc2.now().unixtime();
+
+            SEC_TIMER = millis() / 1000;
 
             last_ping = SEC_TIMER;
             //net_on = 1;
@@ -1211,7 +1223,8 @@ void TCP() {
         while (client.available() > 0) {
             int bytes_read = client.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';  // Ukonèovací znak pro øetìzec
-            SEC_TIMER = rtc2.getEpoch();
+            //SEC_TIMER = rtc2.getEpoch();
+            SEC_TIMER = millis() / 1000;
             last_ping = SEC_TIMER;
             //last_ping = rtc2.getEpoch();
             //last_ping = rtc2.now().unixtime();
@@ -1266,7 +1279,8 @@ void TCP() {
                 thetm.tm_mon = thetm.tm_mon;
                 thetm.tm_year = atoi(buffer + 2);
 
-                SEC_TIMER = mktime(&thetm);
+                //SEC_TIMER = mktime(&thetm);
+                SEC_TIMER = millis() / 1000;
                 timer_reset = SEC_TIMER + 86400;
                 last_ping = SEC_TIMER;
                 //logToSerial(String(thetm.tm_year) + "-" + String(thetm.tm_mon) + "-" + String(thetm.tm_mday), 1);
