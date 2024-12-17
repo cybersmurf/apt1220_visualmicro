@@ -19,9 +19,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "uEEPROMLib.h"
-
-#include "uEspConfigLib.h"
+///vypnutí použití EEPROM a EspConfigLib
+//#include "uEEPROMLib.h"
+//#include "uEspConfigLib.h"
 
 #include <Preferences.h>
 
@@ -30,11 +30,13 @@
 
 // Caution: It need to be a global variable or a global pointer.
 // if FS is a 'setup' variable it will lead to crashes
-uEspConfigLibFSInterface* configFsC;
-uEspConfigLib* config;
+///vypnutí použití EEPROM a EspConfigLib
+//uEspConfigLibFSInterface* configFsC;
+//uEspConfigLib* config;
 
 // uEEPROMLib eeprom;
-uEEPROMLib eeprom(0x50);
+///vypnutí použití EEPROM a EspConfigLib
+//uEEPROMLib eeprom(0x50);
 
 static DS1307 rtc2;
 
@@ -167,6 +169,8 @@ TaskHandle_t tDEMO;
 
 char c_string2[16] = { 0 };
 
+///vypnutí použití EEPROM a EspConfigLib
+/*
 void setup_inifile() {
     configFsC = new uEspConfigLibFSLittlefs("/config.ini", true);
     if (configFsC->status() == uEspConfigLibFS_STATUS_FATAL) {
@@ -178,6 +182,7 @@ void setup_inifile() {
     config->addOption("wifi_ssid", "SSID of your WiFi", "Unconfigured_device");
     config->addOption("wifi_password", "Password of your WiFi", "wifi_password");
 }
+*/
 
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
@@ -202,9 +207,12 @@ void setup() {
         reset_buffer_file();
     }
 
-    setup_inifile();
+    ///vypnutí použití EEPROM a EspConfigLib
+    //setup_inifile();
 
-    eeprom.eeprom_read(240, &loaded_default);
+    ///vypnutí použití EEPROM a EspConfigLib
+    //eeprom.eeprom_read(240, &loaded_default);
+
     delay(100);
 
     //if (loaded_default!=1) { set_default(); save_config();}
@@ -377,6 +385,7 @@ boolean save_config() {
 
     preferences.putBool("useWifi", useWifi);
     preferences.putBool("useETH", useETH);
+
     preferences.end();
     return true;
 }
@@ -399,7 +408,8 @@ void set_default() {
     ping_timeout = 4;
 
     loaded_default = 1;
-    eeprom.eeprom_write(240, &loaded_default);
+    ///vypnutí použití EEPROM a EspConfigLib
+    //eeprom.eeprom_write(240, &loaded_default);
 }
 
 void init_lcd() {
