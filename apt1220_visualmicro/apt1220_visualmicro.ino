@@ -47,7 +47,7 @@ HardwareSerial SerialC(1); // Pro SerialC
 HardwareSerial SerialD(2); // Pro SerialD
 
 #define TCPCONFIG 1
-#define VERZE_PRACANT  "3.3.17"
+#define VERZE_PRACANT  "3.3.25"
 #define ALOC_MEM 64000
 #define SERB_USEPORTD
 #define timeout_reset 86400;  // jak casto resetovat
@@ -59,12 +59,14 @@ HardwareSerial SerialD(2); // Pro SerialD
 #define C_GET_TIME       $03;  // Pošli èas           PC <-> TERMINAL
 #define C_DATA_WORKER    $04;  // Posilam zamestnance PC <-> TERMINAL
 
-#define  PORT 		54321
+#define PORT 		     54321
 
-#define IF_DOWN			    0
-#define IF_COMING_UP		1
-#define IF_UP				    2
-#define IF_COMING_DOWN	3
+#define IF_DOWN		     0
+#define IF_COMING_UP	 1
+#define IF_UP			 2
+#define IF_COMING_DOWN	 3
+
+#define RTC_YEAR_OFFSET  1900
 
 //static int __attribute__((section(".noinit"))) loaded_default = 0;
 static int loaded_default = 0;
@@ -1073,7 +1075,8 @@ void get_time(unsigned long thetime, char* buff) {
 
     // Vytvoøení formátovaného øetìzce s datem a èasem
     sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
-        1900 + thetm.tm_year,    // Rok zaèíná od 1900
+        //1900 + thetm.tm_year,    // Rok zaèíná od 1900
+        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
         thetm.tm_mon + 1,        // Mìsíce jsou indexovány od 0
         thetm.tm_mday,           // Den v mìsíci
         thetm.tm_hour,           // Hodiny
@@ -1093,7 +1096,8 @@ void print_time(unsigned long thetime, char* buff)
                 thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
     */
     sprintf(buff, "%02d.%02d.%04d  %02d:%02d:%02d",
-        thetm.tm_mday, thetm.tm_mon + 1, 1900 + thetm.tm_year,
+        //thetm.tm_mday, thetm.tm_mon + 1, 1900 + thetm.tm_year,
+        thetm.tm_mday, thetm.tm_mon + 1, RTC_YEAR_OFFSET + thetm.tm_year,
         thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
 
 };
