@@ -190,22 +190,68 @@ void reset_buffer_file() {
     writeFile(LittleFS, "/apt1220/aptbuffer.txt", ""); // Create a hello1.txt file with the content "Hello1"
 }
 
-void setup() {
-    Serial.begin(115200);
-
-    delay(2000);
-
+void initializeHardware() {
     Wire.begin();
     delay(100);
+    SerialC.begin(9600, SERIAL_8N1, 36, 14);
+    SerialD.begin(9600, SERIAL_8N1, 32, 33);
+}
 
+void initializeFileSystem() {
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
         Serial.println("LittleFS Mount Failed");
         return;
     }
-
     if (!LittleFS.exists("/apt1220/aptbuffer.txt")) {
         reset_buffer_file();
     }
+}
+
+void initializeNetwork() {
+    // Add a handler for network events. This is misnamed "WiFi" because the ESP32 is historically WiFi only,
+    // but in our case, this will react to Ethernet events.
+    Serial.print("Registering event handler for ETH events...");
+    WiFi.onEvent(WiFiEvent);
+    if (useWifi) {
+        connectToWiFi();
+    }
+    if (useETH) {
+        ETH.begin();
+    }
+    connectToServer();
+}
+
+void initializeTasks() {
+    xTaskCreatePinnedToCore(tSEC_TIMERcode, "tSEC_TIMER", 4096, NULL, 0, &tSEC_TIMER, 1);
+    xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", 4096, NULL, 0, &tLAST_PING, 1);
+}
+
+void initializeDisplay() {
+    lcd2.init();
+    lcd2.backlight();
+    lcd2.createChar(0, customChar);
+    lcd2.clear();
+    delay(200);
+    lcd2.printf("       eMISTR       ");
+    delay(200);
+    rtc2.setHourMode(CLOCK_H24);
+    rtc2.startClock();
+}
+
+void loadConfiguration() {
+    if (!load_config()) {
+        set_default();
+        save_config();
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    delay(2000);
+
+	initializeHardware();
+	initializeFileSystem();
+
 
     ///vypnutí použití EEPROM a EspConfigLib
     //setup_inifile();
@@ -215,70 +261,12 @@ void setup() {
 
     delay(100);
 
-    //if (loaded_default!=1) { set_default(); save_config();}
-    Serial.println("Load config ...");
-    delay(2000);
-    boolean confiLoaded = load_config();
-    delay(100);
+	loadConfiguration();
 
-    //set_default();
+	initializeNetwork();
+	initializeTasks();
 
-    lcd2.init();
-    //lcd2.clear();                             // Initialize the LCD
-    lcd2.backlight();                         // Turn on the LCD backlight
-    lcd2.createChar(0, customChar);
-    lcd2.clear();
-    delay(200);
-    lcd2.printf("       eMISTR       ");
-    delay(200);
-
-    rtc2.setHourMode(CLOCK_H24);
-    rtc2.startClock();
-
-    xTaskCreatePinnedToCore(
-        tSEC_TIMERcode, /* Function to implement the task */
-        "tSEC_TIMER", /* Name of the task */
-        4096,  /* Stack size in words */
-        NULL,  /* Task input parameter */
-        0,  /* Priority of the task */
-        &tSEC_TIMER,  /* Task handle. */
-        1); /* Core where the task should run */
-    delay(200);
-
-
-    SerialC.begin(9600, SERIAL_8N1, 36, 14);  // Nastavte správné piny pro SerialC
-    //SerialC.begin(9600, SERIAL_8N1, 36, 35);  // Nastavte správné piny pro SerialC
-    SerialD.begin(9600, SERIAL_8N1, 32, 33);   // Nastavte správné piny pro SerialD  
-
-    // Add a handler for network events. This is misnamed "WiFi" because the ESP32 is historically WiFi only,
-    // but in our case, this will react to Ethernet events.
-    Serial.print("Registering event handler for ETH events...");
-    WiFi.onEvent(WiFiEvent);
-
-    delay(200);
-
-    if (useWifi) {
-        connectToWiFi();
-    }
-
-    // Starth Ethernet (this does NOT start WiFi at the same time)
-    if (useETH) {
-        Serial.print("Starting ETH interface...");
-
-        ETH.begin();
-    }
-
-    connectToServer();
-
-    xTaskCreatePinnedToCore(
-        tLAST_PINGcode, /* Function to implement the task */
-        "tLAST_PING", /* Name of the task */
-        4096,  /* Stack size in words */
-        NULL,  /* Task input parameter */
-        0,  /* Priority of the task */
-        &tLAST_PING,  /* Task handle. */
-        1); /* Core where the task should run */
-    delay(100);
+	initializeDisplay();
 
     /*
       char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
@@ -526,6 +514,51 @@ void resetConfig() {
 }
 
 void reader_input(const char* display_str, char* data_to_fill) {
+    char new_data[16] = "";  // Buffer for new data
+    char buffer2[100];       // Buffer for serial input
+
+    fast_clear_disp();
+    delay(10);
+
+    lcd2.setCursor(0, 0);
+    lcd2.printf("%s", display_str);
+    lcd2.setCursor(0, 1);
+    lcd2.printf("%s", data_to_fill);
+    lcd2.setCursor(0, 2);
+    lcd2.printf("new:");
+
+    delay(10);
+    while (true) {
+        if (SerialC.available() > 0) {
+            int len = SerialC.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
+            buffer2[len] = '\0';  // Null-terminate the string
+
+            if (strcmp(buffer2, "STORNO") == 0) {
+                break;
+            }
+            else if (strcmp(buffer2, "OK") == 0) {
+                strncpy(data_to_fill, new_data, sizeof(new_data));
+                break;
+            }
+            else if (strcmp(buffer2, "DEFAULT") == 0) {
+                if (strlen(new_data) > 0) {
+                    new_data[strlen(new_data) - 1] = '\0';
+                    lcd2.setCursor(strlen(new_data) + 4, 2);
+                    lcd2.printf(" ");
+                    lcd2.setCursor(strlen(new_data) + 4, 2);
+                }
+            }
+            else {
+                strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
+                lcd2.printf("%s", buffer2);
+            }
+        }
+    }
+}
+
+/*
+
+void reader_input(const char* display_str, char* data_to_fill) {
     char new_data[16] = "";  // Buffer pro nová data
     String buffer2;          // Pomocný buffer pro sériový vstup
 
@@ -575,6 +608,8 @@ void reader_input(const char* display_str, char* data_to_fill) {
         }
     }
 }
+
+*/
 
 void serial(char* buffer2, int port) {
     /* void serial(const char* buffer2, int port) {  */
@@ -924,7 +959,7 @@ void loop() {
     */
 
     //delay(100);
-    delay(100);
+    delay(10);
 }
 
 void tDEMOcode(void* parameter) {
@@ -989,6 +1024,7 @@ void logToSerial(const String vMessage, int pLogLevel) {
 }
 
 void connectToWiFi() {
+    setHostname(); // Set the hostname before connecting to WiFi
     WiFi.begin(ssid, password);
 
     int retryAttemp = 0;
@@ -997,7 +1033,11 @@ void connectToWiFi() {
         delay(500);
         Serial.print(".");
         ++retryAttemp;
-        if (retryAttemp > 4) { return; }
+        if (retryAttemp > 4) { 
+            Serial.println("Failed to connect to WiFi. Switching to AP mode.");
+            startAPMode();
+            return;
+        }
     }
     Serial.println("WiFi connected");
 }
@@ -1030,7 +1070,8 @@ void WiFiEvent(WiFiEvent_t event)
         // This will happen during setup, when the Ethernet service starts
         Serial.println("ETH Started");
         //set eth hostname here
-        ETH.setHostname("esp32-ethernet");
+        //ETH.setHostname("esp32-ethernet");
+		setHostname();
         //ETH.setHostname( ETH.macAddress().c_str() );
         break;
 
@@ -1580,4 +1621,81 @@ void createDir(fs::FS& fs, const char* path) {
     else {
         Serial.println("mkdir failed");
     }
+}
+
+void startAPMode() {
+    // Get the MAC address
+    String macAddress = WiFi.macAddress();
+    macAddress.replace(":", ""); // Remove colons from MAC address
+
+    // Create the SSID using the MAC address
+    String ssidAP = "APT1220_WIFI_" + macAddress;
+
+    // Start the SoftAP with the generated SSID
+    WiFi.softAP(ssidAP.c_str(), "12345678");
+    Serial.println("AP mode started. SSID: " + ssidAP);
+    Serial.println("IP address: " + WiFi.softAPIP().toString());
+
+    // Start the web server
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/scan", HTTP_GET, handleScanNetworks);
+    server.on("/save", HTTP_POST, handleSaveCredentials);
+    server.begin();
+    Serial.println("Web server started.");
+}
+
+
+void handleRoot() {
+    String html = "<html><body>";
+    html += "<h1>Available Networks</h1>";
+    html += "<form action='/save' method='POST'>";
+    html += "<label for='ssid'>SSID:</label><br>";
+    html += "<input type='text' id='ssid' name='ssid'><br>";
+    html += "<label for='password'>Password:</label><br>";
+    html += "<input type='password' id='password' name='password'><br><br>";
+    html += "<input type='submit' value='Save'>";
+    html += "</form>";
+    html += "</body></html>";
+    server.send(200, "text/html", html);
+}
+
+void handleScanNetworks() {
+    int n = WiFi.scanNetworks();
+    String html = "<html><body>";
+    html += "<h1>Available Networks</h1>";
+    html += "<ul>";
+    for (int i = 0; i < n; ++i) {
+        html += "<li>" + WiFi.SSID(i) + " (" + WiFi.RSSI(i) + "dBm)</li>";
+    }
+    html += "</ul>";
+    html += "<a href='/'>Back</a>";
+    html += "</body></html>";
+    server.send(200, "text/html", html);
+}
+
+void handleSaveCredentials() {
+    String newSSID = server.arg("ssid");
+    String newPassword = server.arg("password");
+
+    if (newSSID.length() > 0 && newPassword.length() > 0) {
+        preferences.begin("my-app", false);
+        preferences.putString("SSID_NAME", newSSID);
+        preferences.putString("SSID_PASS", newPassword);
+        preferences.end();
+
+        server.send(200, "text/html", "<html><body><h1>Credentials Saved. Restarting...</h1></body></html>");
+        delay(2000);
+        ESP.restart();
+    }
+    else {
+        server.send(400, "text/html", "<html><body><h1>Invalid Input</h1></body></html>");
+    }
+}
+
+void setHostname() {
+    String macAddress = WiFi.macAddress();
+    macAddress.replace(":", ""); // Remove colons from MAC address
+    String hostname = "APT_" + macAddress;
+    WiFi.setHostname(hostname.c_str());
+    ETH.setHostname(hostname.c_str());
 }
