@@ -1257,7 +1257,8 @@ void TCP() {
                 //thetm.tm_mon = atoi(buffer + 7) - 1;
                 thetm.tm_mon = atoi(buffer + 7);
                 buffer[6] = 0;
-                thetm.tm_year = atoi(buffer + 2) - 1900;
+                //thetm.tm_year = atoi(buffer + 2) - 1900;
+                thetm.tm_year = atoi(buffer + 2);
                 logToSerial(String(thetm.tm_year), 0);
 
                 //ESP32 realtime clock
