@@ -208,17 +208,26 @@ void initializeFileSystem() {
 }
 
 void initializeNetwork() {
-    // Add a handler for network events. This is misnamed "WiFi" because the ESP32 is historically WiFi only,
-    // but in our case, this will react to Ethernet events.
     Serial.print("Registering event handler for ETH events...");
     WiFi.onEvent(WiFiEvent);
+    bool wifiConnected = false;
+    bool ethConnected = false;
+
     if (useWifi) {
         connectToWiFi();
+        wifiConnected = (WiFi.status() == WL_CONNECTED);
     }
     if (useETH) {
         ETH.begin();
+        ethConnected = eth_connected;
     }
-    connectToServer();
+
+    if (!wifiConnected && !ethConnected) {
+        startAPMode();
+    }
+    else {
+        connectToServer();
+    }
 }
 
 void initializeTasks() {
@@ -1033,9 +1042,8 @@ void connectToWiFi() {
         delay(500);
         Serial.print(".");
         ++retryAttemp;
-        if (retryAttemp > 4) { 
-            Serial.println("Failed to connect to WiFi. Switching to AP mode.");
-            startAPMode();
+        if (retryAttemp > 4) {
+            Serial.println("Failed to connect to WiFi.");
             return;
         }
     }
@@ -1044,20 +1052,15 @@ void connectToWiFi() {
 
 void connectToServer() {
     if (client.connect(serverIP, serverPort)) {
-        //net_on = 1;
         setNetOn(1, 12);
-
-        //SEC_TIMER = rtc2.getEpoch();
         SEC_TIMER = millis() / 1000;
-        //SEC_TIMER = rtc2.now().unixtime();
-
         last_ping = SEC_TIMER;
-
         Serial.println("Connected to server");
     }
     else {
         setNetOn(0, 13);
         Serial.println("Connection to server failed");
+        startAPMode(); // Start AP mode if server connection fails
     }
 }
 
@@ -1653,11 +1656,14 @@ void handleRoot() {
     html += "<input type='text' id='ssid' name='ssid'><br>";
     html += "<label for='password'>Password:</label><br>";
     html += "<input type='password' id='password' name='password'><br><br>";
+    html += "<input type='checkbox' id='useWifi' name='useWifi' value='true'>";
+    html += "<label for='useWifi'> Use WiFi</label><br><br>";
     html += "<input type='submit' value='Save'>";
     html += "</form>";
     html += "</body></html>";
     server.send(200, "text/html", html);
 }
+
 
 void handleScanNetworks() {
     int n = WiFi.scanNetworks();
@@ -1676,11 +1682,13 @@ void handleScanNetworks() {
 void handleSaveCredentials() {
     String newSSID = server.arg("ssid");
     String newPassword = server.arg("password");
+    bool useWifi = server.hasArg("useWifi");
 
     if (newSSID.length() > 0 && newPassword.length() > 0) {
         preferences.begin("my-app", false);
         preferences.putString("SSID_NAME", newSSID);
         preferences.putString("SSID_PASS", newPassword);
+        preferences.putBool("useWifi", useWifi);
         preferences.end();
 
         server.send(200, "text/html", "<html><body><h1>Credentials Saved. Restarting...</h1></body></html>");
