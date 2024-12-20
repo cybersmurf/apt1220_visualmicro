@@ -1,3 +1,5 @@
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
 #include "FS.h"
 #include "LittleFS.h"
 #include <WiFi.h>
@@ -5,7 +7,7 @@
 #include <esp_wifi.h>
 #include "string.h"
 #include <ETH.h>
-#include <WebServer.h>
+//#include <WebServer.h>
 #include "time.h"
 #include <Arduino.h>
 #include <stdarg.h>  // Knihovna pro variabilní argumenty
@@ -28,6 +30,8 @@
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
 
+#define DEBUG_MODE
+
 // Caution: It need to be a global variable or a global pointer.
 // if FS is a 'setup' variable it will lead to crashes
 ///vypnutí použití EEPROM a EspConfigLib
@@ -42,7 +46,9 @@ static DS1307 rtc2;
 
 LCDI2C_Latin_Symbols lcd2(0x27, 20, 4);    // I2C address = 0x27; LCD = Surenoo SLC1602A (European)
 WiFiClient client;
-WebServer server(80);
+//WebServer server(80);
+AsyncWebServer server(80);
+
 
 // Inicializace sériových portù
 HardwareSerial SerialC(1); // Pro SerialC
@@ -312,7 +318,16 @@ void setup() {
     if ((timer2 > 30) || (timer2 < 1)) timer2 = 3;
 
     timeout1 = 999999999;
-    timer_reset = SEC_TIMER + 86400;  // Denní reset      
+    timer_reset = SEC_TIMER + 86400;  // Denní reset   
+
+#ifdef DEBUG_MODE
+    // Start the web server in debug mode
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/scan", HTTP_GET, handleScanNetworks);
+    server.on("/save", HTTP_POST, handleSaveCredentials);
+    server.begin();
+    Serial.println("Web server started in debug mode.");
+#endif
 }
 
 void fast_clear_disp() {
@@ -968,7 +983,7 @@ void loop() {
     */
 
     //delay(100);
-    delay(10);
+    delay(50);
 }
 
 void tDEMOcode(void* parameter) {
@@ -1036,13 +1051,12 @@ void connectToWiFi() {
     setHostname(); // Set the hostname before connecting to WiFi
     WiFi.begin(ssid, password);
 
-    int retryAttemp = 0;
-
+    int retryAttempt = 0;
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
-        ++retryAttemp;
-        if (retryAttemp > 4) {
+        ++retryAttempt;
+        if (retryAttempt > 4) {
             Serial.println("Failed to connect to WiFi.");
             return;
         }
@@ -1060,7 +1074,7 @@ void connectToServer() {
     else {
         setNetOn(0, 13);
         Serial.println("Connection to server failed");
-        startAPMode(); // Start AP mode if server connection fails
+        //startAPMode(); // Start AP mode if server connection fails
     }
 }
 
@@ -1627,6 +1641,12 @@ void createDir(fs::FS& fs, const char* path) {
 }
 
 void startAPMode() {
+    // Check if SoftAP is already running
+    if (WiFi.softAPgetStationNum() > 0) {
+        Serial.println("SoftAP is already running.");
+        return;
+    }
+
     // Get the MAC address
     String macAddress = WiFi.macAddress();
     macAddress.replace(":", ""); // Remove colons from MAC address
@@ -1635,20 +1655,24 @@ void startAPMode() {
     String ssidAP = "APT1220_WIFI_" + macAddress;
 
     // Start the SoftAP with the generated SSID
-    WiFi.softAP(ssidAP.c_str(), "12345678");
-    Serial.println("AP mode started. SSID: " + ssidAP);
-    Serial.println("IP address: " + WiFi.softAPIP().toString());
+    if (WiFi.softAP(ssidAP.c_str(), "12345678")) {
+        Serial.println("AP mode started. SSID: " + ssidAP);
+        Serial.println("IP address: " + WiFi.softAPIP().toString());
 
-    // Start the web server
-    server.on("/", HTTP_GET, handleRoot);
-    server.on("/scan", HTTP_GET, handleScanNetworks);
-    server.on("/save", HTTP_POST, handleSaveCredentials);
-    server.begin();
-    Serial.println("Web server started.");
+        // Start the web server
+        server.on("/", HTTP_GET, handleRoot);
+        server.on("/scan", HTTP_GET, handleScanNetworks);
+        server.on("/save", HTTP_POST, handleSaveCredentials);
+        server.begin();
+        Serial.println("Web server started.");
+    }
+    else {
+        Serial.println("Failed to start AP mode.");
+    }
 }
 
 
-void handleRoot() {
+void handleRoot(AsyncWebServerRequest* request) {
     String html = "<html><body>";
     html += "<h1>Available Networks</h1>";
     html += "<form action='/save' method='POST'>";
@@ -1661,11 +1685,11 @@ void handleRoot() {
     html += "<input type='submit' value='Save'>";
     html += "</form>";
     html += "</body></html>";
-    server.send(200, "text/html", html);
+    request->send(200, "text/html", html);
 }
 
 
-void handleScanNetworks() {
+void handleScanNetworks(AsyncWebServerRequest* request) {
     int n = WiFi.scanNetworks();
     String html = "<html><body>";
     html += "<h1>Available Networks</h1>";
@@ -1676,13 +1700,13 @@ void handleScanNetworks() {
     html += "</ul>";
     html += "<a href='/'>Back</a>";
     html += "</body></html>";
-    server.send(200, "text/html", html);
+    request->send(200, "text/html", html);
 }
 
-void handleSaveCredentials() {
-    String newSSID = server.arg("ssid");
-    String newPassword = server.arg("password");
-    bool useWifi = server.hasArg("useWifi");
+void handleSaveCredentials(AsyncWebServerRequest* request) {
+    String newSSID = request->arg("ssid");
+    String newPassword = request->arg("password");
+    bool useWifi = request->hasArg("useWifi");
 
     if (newSSID.length() > 0 && newPassword.length() > 0) {
         preferences.begin("my-app", false);
@@ -1691,18 +1715,24 @@ void handleSaveCredentials() {
         preferences.putBool("useWifi", useWifi);
         preferences.end();
 
-        server.send(200, "text/html", "<html><body><h1>Credentials Saved. Restarting...</h1></body></html>");
+        request->send(200, "text/html", "<html><body><h1>Credentials Saved. Restarting...</h1></body></html>");
         delay(2000);
         ESP.restart();
     }
     else {
-        server.send(400, "text/html", "<html><body><h1>Invalid Input</h1></body></html>");
+        request->send(400, "text/html", "<html><body><h1>Invalid Input</h1></body></html>");
     }
 }
 
 void setHostname() {
     String macAddress = WiFi.macAddress();
     macAddress.replace(":", ""); // Remove colons from MAC address
+
+    if (macAddress.startsWith("00000000")) {
+        macAddress = WiFi.macAddress();
+        macAddress.replace(":", ""); // Remove colons from MAC address      
+    }
+
     String hostname = "APT_" + macAddress;
     WiFi.setHostname(hostname.c_str());
     ETH.setHostname(hostname.c_str());
