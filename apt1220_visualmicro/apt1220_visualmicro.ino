@@ -16,7 +16,8 @@
 
 #include <Wire.h>
 #include <I2C_RTC.h>
-#include <RTClib.h>
+//#include <RTClib.h>
+//#include <uRTClib.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -26,6 +27,9 @@
 //#include "uEspConfigLib.h"
 
 #include <Preferences.h>
+
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
 
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
@@ -43,6 +47,7 @@
 //uEEPROMLib eeprom(0x50);
 
 static DS1307 rtc2;
+//uRTCLib rtc2;
 
 LCDI2C_Latin_Symbols lcd2(0x27, 20, 4);    // I2C address = 0x27; LCD = Surenoo SLC1602A (European)
 WiFiClient client;
@@ -55,7 +60,7 @@ HardwareSerial SerialC(1); // Pro SerialC
 HardwareSerial SerialD(2); // Pro SerialD
 
 #define TCPCONFIG 1
-#define VERZE_PRACANT  "3.3.25"
+#define VERZE_PRACANT  "4.0.0"
 #define ALOC_MEM 64000
 #define SERB_USEPORTD
 #define timeout_reset 86400;  // jak casto resetovat
@@ -74,7 +79,7 @@ HardwareSerial SerialD(2); // Pro SerialD
 #define IF_UP			 2
 #define IF_COMING_DOWN	 3
 
-#define RTC_YEAR_OFFSET  1870
+#define RTC_YEAR_OFFSET  1900
 
 //static int __attribute__((section(".noinit"))) loaded_default = 0;
 static int loaded_default = 0;
@@ -155,6 +160,23 @@ static bool useDHCP = true;
 
 static int efect = 0;
 
+// Add this global variable to track time for the asterisk movement
+static unsigned long lastEffectChange = 0;
+
+// Lokální verze firmware
+const String localVersion = "1.0.0.1";
+// URL k souboru, kde je uvedena aktuální verze firmware na serveru
+const char* versionURL = "http://192.168.222.114:82/ota_update/version.txt";
+// URL k novému firmware (binární soubor)
+const char* firmwareURL = "http://192.168.222.114:82/ota_update/firmware.bin";
+
+// Globální promìnné pro OTA aktualizaci
+TaskHandle_t otaTaskHandle = NULL;
+bool otaInProgress = false;
+bool otaUpdateAvailable = false;
+String currentVersion = "1.0.0.1";
+String newVersion = "";
+
 Preferences preferences;
 
 byte customChar[] = {
@@ -168,10 +190,15 @@ byte customChar[] = {
   B00000
 };
 
-TaskHandle_t tSEC_TIMER;
-TaskHandle_t tLAST_PING;
-TaskHandle_t tTCP;
-TaskHandle_t tDEMO;
+TaskHandle_t tSEC_TIMER = NULL;
+TaskHandle_t tLAST_PING = NULL;
+TaskHandle_t tTCP = NULL;
+TaskHandle_t tDEMO = NULL;
+
+SemaphoreHandle_t demoMutex = NULL;
+SemaphoreHandle_t tcpMutex = NULL;
+SemaphoreHandle_t lastPingMutex = NULL;
+SemaphoreHandle_t secTimerMutex = NULL;
 
 char c_string2[16] = { 0 };
 
@@ -208,8 +235,17 @@ void initializeFileSystem() {
         Serial.println("LittleFS Mount Failed");
         return;
     }
+    else
+    {
+        Serial.println("LittleFS Mount Successful");
+    }
+	
     if (!LittleFS.exists("/apt1220/aptbuffer.txt")) {
         reset_buffer_file();
+    }
+    else
+    {
+		Serial.println("Buffer file exists");
     }
 }
 
@@ -248,9 +284,11 @@ void initializeDisplay() {
     lcd2.clear();
     delay(200);
     lcd2.printf("       eMISTR       ");
+    lcd2.setCursor(0, 2);
+	lcd2.printf("  Verze: %s", VERZE_PRACANT);
     delay(200);
-    rtc2.setHourMode(CLOCK_H24);
-    rtc2.startClock();
+    //rtc2.setHourMode(CLOCK_H24);
+    //rtc2.startClock();
 }
 
 void loadConfiguration() {
@@ -262,7 +300,19 @@ void loadConfiguration() {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000);
+    delay(1000);
+
+    //rtc2.begin();
+    //rtc2.set_12hour_mode(false);
+    rtc2.setHourMode(CLOCK_H24);
+	//rtc2.setYear(2021);
+
+    if (!rtc2.isRunning()) {
+        Serial.println("RTC is NOT running, let's set the time!");
+        //rtc2.startClock();
+        //rtc2.begin(Wire); // adjust(DateTime(2014, 1, 21, 3, 0, 0));
+        rtc2.startClock();
+    }
 
 	initializeHardware();
 	initializeFileSystem();
@@ -279,9 +329,29 @@ void setup() {
 	loadConfiguration();
 
 	initializeNetwork();
+
+    // Kontrola aktualizací již pøi spuštìní
+    //checkForUpdates();
+
 	initializeTasks();
 
+    // Inicializace OTA
+    setupOTA();
+
 	initializeDisplay();
+
+    // Create mutex for safe LCD access
+    demoMutex = xSemaphoreCreateMutex();
+
+    // Create the task that will handle the demo function
+    xTaskCreate(
+        tDEMOcode,          // Function to implement the task
+        "DemoTask",        // Name of the task
+        2048,              // Stack size in words
+        NULL,              // Task input parameter
+        1,                 // Priority of the task
+        &tDEMO    // Task handle
+    );
 
     /*
       char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
@@ -318,7 +388,9 @@ void setup() {
     if ((timer2 > 30) || (timer2 < 1)) timer2 = 3;
 
     timeout1 = 999999999;
-    timer_reset = SEC_TIMER + 86400;  // Denní reset   
+    timer_reset = SEC_TIMER + 86400;  // Denní reset 
+
+    //rtc2.startClock();
 
 #ifdef DEBUG_MODE
     // Start the web server in debug mode
@@ -661,6 +733,8 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
+    xSemaphoreTake(demoMutex, portMAX_DELAY);
+
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
     if (buffer2String.equals("SET-IP")) {
@@ -844,10 +918,30 @@ void serial(char* buffer2, int port) {
         case 'F':
             strcpy(tmp, "\x07");
             break;
+        case 'G':
+            strcpy(tmp, "\x10");
+            break;
+        case 'H':
+            strcpy(tmp, "\x11");
+            break;
+        case 'I':
+            strcpy(tmp, "\x12");
+            break;
+        case 'J':
+            strcpy(tmp, "\x13");
+            break;
+        case 'K':
+            strcpy(tmp, "\x19");
+            break;
+        case 'L':
+            strcpy(tmp, "\x20");
+            break;
         default:
             strcpy(tmp, "\x17");
             break;
         }
+
+        strcat(tmp, buffer2);
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
@@ -889,16 +983,18 @@ void serial(char* buffer2, int port) {
             memset(off_buffer, 0x00, off_buffer_size);
         }
     }
+
+    xSemaphoreGive(demoMutex);
 }
 
-void loop_bbbb() {
+void tDEMOscreen() {
     char buffer2[100] = { 0 };
 
     // Zobrazení informací na LCD
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
-        String tmpConnType = " eMISTR ESP32   ";
+        String tmpConnType = " eMISTR_ESP32   ";
         tmpConnType += useWifi ? "WIFI" : " ETH";
         lcd2.printf(tmpConnType.c_str());
     }
@@ -918,8 +1014,16 @@ void loop_bbbb() {
 
     lcd2.setCursor(0, 2);
     //print_time(SEC_TIMER, buffer2);
-    print_time(rtc2.getEpoch(), buffer2);
 
+    //DateTime now = rtc2.now();
+	//String nowStr = now.timestamp(DateTime::TIMESTAMP_FULL);
+
+    //lcd2.print(nowStr);
+    
+    print_time(rtc2.getEpoch() , buffer2);
+
+    //logToSerial(rtc2.getDateTimeString() , 1);
+	//logToSerial(nowStr.c_str(), 1);
     //logToSerial(buffer2,1);
 
     //print_time(rtc2.now().unixtime(), buffer2);
@@ -949,7 +1053,14 @@ void loop() {
         }
     }
 
-    loop_bbbb();
+    //loop_bbbb();
+
+    // Periodická kontrola, napøíklad každou minutu (pro demonstraci)
+    //static unsigned long lastCheck = 0;
+    //if (millis() - lastCheck > 60000) { // 60 sekund
+    //    checkForUpdates();
+    //    lastCheck = millis();
+    //}
 
     // Ètení z rùzných sériových portù (SerialC, SerialD)
     if (SerialC.available()) {
@@ -986,10 +1097,31 @@ void loop() {
     delay(50);
 }
 
+
+/*
 void tDEMOcode(void* parameter) {
     for (;;) {
         tDEMOrun();
         vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+*/
+
+void tDEMOcode(void* parameter) {
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(10); // 100ms interval
+
+    while (true) {
+        // Acquire mutex before accessing the LCD
+        if (xSemaphoreTake(demoMutex, portMAX_DELAY) == pdTRUE) {
+            //tDEMOrun();
+            tDEMOscreen();
+            // Release the mutex
+            xSemaphoreGive(demoMutex);
+        }
+
+        // Wait for the next cycle (100ms)
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
 }
 
@@ -1001,11 +1133,11 @@ void tDEMOrun() {
     // Zobrazení informací na LCD
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
-        lcd2.printf("   eMISTR ESP32    ");
+        lcd2.printf("   eMISTR 2025    ");
     }
     if (key_maker == 1) {
         lcd2.setCursor(0, 0);
-        lcd2.printf(" eMISTR ESP32 DVERE ");
+        lcd2.printf(" eMISTR 2025 DVERE ");
     }
 
     lcd2.setCursor(0, 1);
@@ -1323,6 +1455,8 @@ void TCP() {
                 //rtc.setTimeStruct(thetm);
 
                 //rtc2.setEpoch(rtc.getEpoch());
+
+               
                 rtc2.stopClock();
                 rtc2.setDate(thetm.tm_mday, thetm.tm_mon, atoi(buffer + 2));
 
@@ -1331,6 +1465,7 @@ void TCP() {
 
                 rtc2.startClock();
 
+
                 //rtc2.adjust( mktime(&thetm) );
 
                 //SEC_TIMER = mktime(&thetm);
@@ -1338,8 +1473,8 @@ void TCP() {
                 thetm.tm_mon = thetm.tm_mon;
                 thetm.tm_year = atoi(buffer + 2);
 
-                //SEC_TIMER = mktime(&thetm);
-                SEC_TIMER = millis() / 1000;
+                SEC_TIMER = mktime(&thetm);
+                //SEC_TIMER = millis() / 1000;
                 timer_reset = SEC_TIMER + 86400;
                 last_ping = SEC_TIMER;
                 //logToSerial(String(thetm.tm_year) + "-" + String(thetm.tm_mon) + "-" + String(thetm.tm_mday), 1);
@@ -1412,6 +1547,7 @@ void TCP() {
                 break;
             }
             logToSerial("e:" + String(SEC_TIMER), 0);
+            //delay(timeout1);
         }
     }
 }
@@ -1737,3 +1873,209 @@ void setHostname() {
     WiFi.setHostname(hostname.c_str());
     ETH.setHostname(hostname.c_str());
 }
+
+void checkForUpdates() {
+    Serial.println("Kontrola aktualizací...");
+
+    // Stažení souboru s verzí z serveru
+    HTTPClient http;
+    // Explicitnì zaèínáme HTTP spojení se specifikací portu a timeoutu
+    http.begin(versionURL);
+    http.setTimeout(10000); // Nastavení delšího timeoutu (10 sekund)
+
+    // Pøidání hlavièek pro simulaci bìžného browseru
+    http.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    http.addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+    http.addHeader("Accept-Language", "cs,en-US;q=0.7,en;q=0.3");
+    http.addHeader("Connection", "keep-alive");
+
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+        String serverVersion = http.getString();
+        serverVersion.trim(); // odstraní bílé znaky
+        Serial.print("Verze na serveru: ");
+        Serial.println(serverVersion);
+        Serial.print("Verze na lokální: ");
+        Serial.println(localVersion);
+
+        String localVersionTmp = localVersion;
+        localVersionTmp.replace(".", "");
+        String serverVersionTmp = serverVersion;
+        serverVersionTmp.replace(".", "");
+
+        int localVersionInt = localVersionTmp.toInt();
+        int serverVersionInt = serverVersionTmp.toInt();
+
+        if (serverVersionInt > localVersionInt) {
+            Serial.println("Nová verze nalezena, zahajuji aktualizaci...");
+
+            // Vytvoøíme nový HTTPClient pro stažení aktualizace
+            HTTPClient updateClient;
+
+            // Pøidání hlavièek pro simulaci bìžného browseru i pro update request
+            updateClient.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            updateClient.addHeader("Accept", "*/*");
+            updateClient.addHeader("Accept-Language", "cs,en-US;q=0.7,en;q=0.3");
+            updateClient.addHeader("Connection", "keep-alive");
+            updateClient.setTimeout(30000); // Delší timeout pro stahování firmware (30 sekund)
+
+            Serial.print("Pøipojuji se k: ");
+            Serial.println(firmwareURL);
+
+            // Zkusíme nejprve pøímou metodu s použitím WiFiClient místo HTTPClient
+            WiFiClient client;
+
+            Serial.println("Pokouším se o aktualizaci pøes WiFiClient...");
+            t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
+
+            // Pokud první metoda selže, zkusíme pùvodní metodu s HTTPClient
+            if (ret == HTTP_UPDATE_FAILED) {
+                Serial.println("První metoda selhala, zkouším alternativní metodu...");
+                ret = httpUpdate.update(updateClient, String(firmwareURL));
+            }
+
+            switch (ret) {
+            case HTTP_UPDATE_FAILED:
+                Serial.printf("Aktualizace selhala: %d - %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+                // Dodateèné debugování
+                Serial.print("URL firmware: ");
+                Serial.println(firmwareURL);
+                break;
+            case HTTP_UPDATE_NO_UPDATES:
+                Serial.println("Není k dispozici žádná nová aktualizace.");
+                break;
+            case HTTP_UPDATE_OK:
+                Serial.println("Aktualizace probìhla úspìšnì.");
+                break;
+            }
+        }
+        else {
+            Serial.println("Firmware je aktuální.");
+        }
+    }
+    else {
+        Serial.printf("Nelze získat verzi, HTTP kód: %d\n", httpCode);
+    }
+    http.end();
+}
+
+// Funkce, která bìží jako samostatné vlákno
+void otaUpdateTask(void* parameter) {
+    Serial.println("OTA task started");
+
+    while (true) {
+        // Kontrola dostupnosti aktualizace
+        if (!otaInProgress) {
+            checkForUpdatesBackground();
+        }
+
+        // Pokud je aktualizace dostupná, proveï ji
+        if (otaUpdateAvailable && !otaInProgress) {
+            performUpdate();
+        }
+
+        // Poèkej na další kontrolu (napø. 1 hodina)
+        vTaskDelay(60000 / portTICK_PERIOD_MS); // 1 hodina
+    }
+}
+
+// Kontroluje, zda je dostupná nová verze
+void checkForUpdatesBackground() {
+    Serial.println("Kontrola aktualizací na pozadí...");
+
+    // Stažení souboru s verzí z serveru
+    HTTPClient http;
+    http.begin(versionURL);
+    http.setTimeout(10000);
+
+    // Pøidání hlavièek pro simulaci bìžného browseru
+    http.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    http.addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+        String serverVersion = http.getString();
+        serverVersion.trim(); // odstraní bílé znaky
+
+        Serial.print("Verze na serveru: ");
+        Serial.println(serverVersion);
+        Serial.print("Aktuální verze: ");
+        Serial.println(currentVersion);
+
+        String localVersionTmp = currentVersion;
+        localVersionTmp.replace(".", "");
+        String serverVersionTmp = serverVersion;
+        serverVersionTmp.replace(".", "");
+
+        int localVersionInt = localVersionTmp.toInt();
+        int serverVersionInt = serverVersionTmp.toInt();
+
+        if (serverVersionInt > localVersionInt) {
+            Serial.println("Nová verze nalezena!");
+            otaUpdateAvailable = true;
+            newVersion = serverVersion;
+        }
+        else {
+            Serial.println("Firmware je aktuální.");
+            otaUpdateAvailable = false;
+        }
+    }
+    else {
+        Serial.printf("Nelze získat verzi, HTTP kód: %d\n", httpCode);
+    }
+    http.end();
+}
+
+// Provede samotnou aktualizaci
+void performUpdate() {
+    Serial.println("Zahajuji aktualizaci na pozadí...");
+    otaInProgress = true;
+
+    // Vytvoøení indikace na displeji (pokud je potøeba)
+    // displayUpdateStatus("Aktualizace...");
+
+    // Použijeme pøímou metodu s WiFiClient, která fungovala
+    WiFiClient client;
+
+    t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
+
+    switch (ret) {
+    case HTTP_UPDATE_FAILED:
+        Serial.printf("Aktualizace selhala: %d - %s\n",
+            httpUpdate.getLastError(),
+            httpUpdate.getLastErrorString().c_str());
+        // Resetujeme pøíznaky pro pøípadný další pokus
+        otaInProgress = false;
+        otaUpdateAvailable = false;
+        break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("Není k dispozici žádná nová aktualizace.");
+        otaInProgress = false;
+        otaUpdateAvailable = false;
+        break;
+
+    case HTTP_UPDATE_OK:
+        Serial.println("Aktualizace probìhla úspìšnì, restartuju...");
+        // Pøi úspìšné aktualizaci dojde k restartu ESP32
+        break;
+    }
+}
+
+// Funkce pro inicializaci OTA úlohy - volejte v setup()
+void setupOTA() {
+    // Nastavíme aktuální verzi
+    //currentVersion = "1.0.0.0";  // Pro testování, v reálu by se èetla z konstanty
+
+    // Vytvoøíme úlohu na jádøe 0 (hlavní aplikace bìží typicky na jádøe 1)
+    xTaskCreatePinnedToCore(
+        otaUpdateTask,      // Funkce, která implementuje úlohu
+        "OTATask",          // Název úlohy
+        8192,               // Velikost zásobníku (v slovech)
+        NULL,               // Parametr úlohy
+        1,                  // Priorita úlohy (nižší èíslo = nižší priorita)
+        &otaTaskHandle,     // Handle úlohy
+        0                   // Jádro CPU, na kterém má úloha bìžet (0 nebo 1)
+    );
+}
+
