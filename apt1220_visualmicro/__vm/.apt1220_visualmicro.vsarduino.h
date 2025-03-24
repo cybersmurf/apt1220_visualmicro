@@ -6,13 +6,15 @@
 			All non-arduino files created by visual micro and all visual studio project or solution files can be freely deleted and are not required to compile a sketch (do not delete your own code!).
 			Note: debugger breakpoints are stored in '.sln' or '.asln' files, knowledge of last uploaded breakpoints is stored in the upload.vmps.xml file. Both files are required to continue a previous debug session without needing to compile and upload again
 	
-	Hardware: OLIMEX ESP32-POE-ISO (esp32_esp32-poe-iso), Platform=esp32, Package=esp32
+	Hardware: OLIMEX ESP32-POE(esp32_esp32-poe), Platform=esp32, Package=esp32
 */
 
 #if defined(_VMICRO_INTELLISENSE)
 
 #ifndef _VSARDUINO_H_
 #define _VSARDUINO_H_
+#pragma diag_suppress=338,2925
+// User Defined Errors to Ignore below... [vm.intellisense.ignore-error-codes]
 #include <arduino.h>
 #include <pins_arduino.h> 
 #include "..\apt1220_visualmicro.ino"
