@@ -395,13 +395,6 @@ void setup() {
     //timeout1 = millis();
     timer_reset = SEC_TIMER + 86400;  // Denní reset 
 
-	uint dt = rtc2.getYear();
-    if (dt < 2025) {
-        char* buffer = "";
-        snprintf(buffer, sizeof(buffer), "\x03~");
-        client.print(buffer);
-    }
-
     //rtc2.startClock();
 
 #ifdef DEBUG_MODE
