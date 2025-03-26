@@ -16,7 +16,7 @@
 
 #include <Wire.h>
 #include <I2C_RTC.h>
-//#include <RTClib.h>
+#include <RTClib.h>
 //#include <uRTClib.h>
 
 #include "freertos/FreeRTOS.h"
@@ -340,9 +340,11 @@ void setup() {
 
 	initializeDisplay();
 
+
     // Create mutex for safe LCD access
     demoMutex = xSemaphoreCreateMutex();
 
+/*
     // Create the task that will handle the demo function
     xTaskCreate(
         tDEMOcode,          // Function to implement the task
@@ -352,6 +354,7 @@ void setup() {
         1,                 // Priority of the task
         &tDEMO    // Task handle
     );
+*/
 
     /*
       char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
@@ -387,8 +390,17 @@ void setup() {
     if ((timer1 > 30) || (timer1 < 1)) timer1 = 15;
     if ((timer2 > 30) || (timer2 < 1)) timer2 = 3;
 
-    timeout1 = 999999999;
+    //timeout1 = 999999999;
+    timeout1 = 0;
+    //timeout1 = millis();
     timer_reset = SEC_TIMER + 86400;  // Denní reset 
+
+	uint dt = rtc2.getYear();
+    if (dt < 2025) {
+        char* buffer = "";
+        snprintf(buffer, sizeof(buffer), "\x03~");
+        client.print(buffer);
+    }
 
     //rtc2.startClock();
 
@@ -409,7 +421,7 @@ void fast_clear_disp() {
 
 void blank_line(int line) {
     lcd2.setCursor(0, line);                       // Umístí kurzor na zaèátek øádku
-    lcd2.printf("                    ");           // Vypíše prázdný øetìzec o 20 mezerách
+    lcd2.print("                    ");           // Vypíše prázdný øetìzec o 20 mezerách
     lcd2.setCursor(0, line);                       // Umístí kurzor zpìt na zaèátek øádku
 }
 
@@ -733,7 +745,8 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
-    xSemaphoreTake(demoMutex, portMAX_DELAY);
+    //xSemaphoreTake(demoMutex, portMAX_DELAY);
+	fast_clear_disp();
 
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
@@ -984,7 +997,7 @@ void serial(char* buffer2, int port) {
         }
     }
 
-    xSemaphoreGive(demoMutex);
+    //xSemaphoreGive(demoMutex);
 }
 
 void tDEMOscreen() {
@@ -994,13 +1007,13 @@ void tDEMOscreen() {
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
-        String tmpConnType = " eMISTR_ESP32   ";
+        String tmpConnType = " eMISTR 2025   ";
         tmpConnType += useWifi ? "WIFI" : " ETH";
         lcd2.printf(tmpConnType.c_str());
     }
     if (key_maker == 1) {
         lcd2.setCursor(0, 0);
-        lcd2.printf(" eMISTR ESP32 DVERE ");
+        lcd2.printf(" eMISTR 20225 DVERE ");
     }
 
     lcd2.setCursor(0, 1);
@@ -1054,6 +1067,8 @@ void loop() {
     }
 
     //loop_bbbb();
+	//tDEMOscreen();
+    if ((millis() / 1000) >= timeout1) { tDEMOscreen(); }
 
     // Periodická kontrola, napøíklad každou minutu (pro demonstraci)
     //static unsigned long lastCheck = 0;
@@ -1094,7 +1109,7 @@ void loop() {
     */
 
     //delay(100);
-    delay(50);
+    delay(5);
 }
 
 
@@ -1115,7 +1130,7 @@ void tDEMOcode(void* parameter) {
         // Acquire mutex before accessing the LCD
         if (xSemaphoreTake(demoMutex, portMAX_DELAY) == pdTRUE) {
             //tDEMOrun();
-            tDEMOscreen();
+            if ((millis()/1000)>=timeout1) { tDEMOscreen(); }
             // Release the mutex
             xSemaphoreGive(demoMutex);
         }
@@ -1503,7 +1518,10 @@ void TCP() {
                 break;
             case 6:
                 blank_line(0);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+				//lcd2.print(buffer + 2);
+				lcd2.printf("%s", "prdel1");
+
                 break;
             case 7:
                 blank_line(2);
