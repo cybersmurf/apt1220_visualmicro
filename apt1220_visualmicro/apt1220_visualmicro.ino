@@ -738,8 +738,7 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
-    //xSemaphoreTake(demoMutex, portMAX_DELAY);
-	fast_clear_disp();
+    if ((millis() / 1000) >= timeout1) { fast_clear_disp(); }
 
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
@@ -947,7 +946,8 @@ void serial(char* buffer2, int port) {
             break;
         }
 
-        strcat(tmp, buffer2);
+        //strcat(tmp, buffer2);
+		strcat(tmp, buffer2String.c_str());
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
@@ -958,7 +958,8 @@ void serial(char* buffer2, int port) {
         // Pøidání èasu k pøíkazùm typu D, E, J atd.
         if (strchr("DEJ0123456789", buffer2[0])) {
             strcat(tmp, "~");
-            get_time(SEC_TIMER, buffer);
+            //get_time(SEC_TIMER, buffer);
+            get_time(buffer);
             strcat(tmp, buffer);
         }
 
@@ -990,7 +991,6 @@ void serial(char* buffer2, int port) {
         }
     }
 
-    //xSemaphoreGive(demoMutex);
 }
 
 void tDEMOscreen() {
@@ -1001,12 +1001,12 @@ void tDEMOscreen() {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
         String tmpConnType = " eMISTR 2025   ";
-        tmpConnType += useWifi ? "WIFI" : " ETH";
+        tmpConnType += useWifi ? "WIFI" : " ETH ";
         lcd2.printf(tmpConnType.c_str());
     }
     if (key_maker == 1) {
         lcd2.setCursor(0, 0);
-        lcd2.printf(" eMISTR 20225 DVERE ");
+        lcd2.printf(" eMISTR 2025 DVERE ");
     }
 
     lcd2.setCursor(0, 1);
@@ -1307,6 +1307,23 @@ void get_time(unsigned long thetime, char* buff) {
     );
 }
 
+void get_time(char* buff) {
+    //DateTime now;
+
+    // Získání aktuálního èasu
+    //now = rtc2.getDateTime();
+
+    // Vytvoøení formátovaného øetìzce s datem a èasem
+    sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
+        rtc2.getYear(),          // Rok (plný, napø. 2024)
+        rtc2.getMonth(),         // Mìsíc (1-12)
+        rtc2.getDay(),           // Den (1-31)
+        rtc2.getHours(),          // Hodiny (0-23)
+        rtc2.getMinutes(),        // Minuty (0-59)
+        rtc2.getSeconds()         // Sekundy (0-59)
+    );
+}
+
 void print_time(unsigned long thetime, char* buff)
 {
     struct tm	thetm;
@@ -1440,6 +1457,10 @@ void TCP() {
             };
 
             logToSerial(buffer, 0);
+
+            String buffer2String = buffer + 2;
+            buffer2String.trim();
+
             // Ovìøení pøíchozího pøíkazu
             switch (buffer[0]) {
             case 2:  // Nastavení èasu
@@ -1503,22 +1524,26 @@ void TCP() {
 
             case 4:
                 blank_line(3);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+				lcd2.printf("%s", buffer2String);
                 break;
             case 5:
                 blank_line(1);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 6:
                 blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
 				//lcd2.print(buffer + 2);
-				lcd2.printf("%s", "prdel1");
 
+				//lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 7:
                 blank_line(2);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 0xB:  // Nastavení timeoutu
                 timer1 = atoi(buffer + 2);
@@ -1531,8 +1556,11 @@ void TCP() {
                 lcd2.printf("*------------------*");
                 lcd2.setCursor(0, 1);
                 lcd2.printf("|                  |");
-                lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
+                //lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
+				logToSerial(buffer, 1);
+                lcd2.setCursor(((20 - buffer2String.length()) / 2) + 0, 1);
                 lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer2String);
                 lcd2.setCursor(0, 2);
                 lcd2.printf("*------------------*");
 
