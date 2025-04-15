@@ -362,3 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /apt1220_visualmicro.sln
+/apt1220_visualmicro/apt1220_visualmicro.ino
