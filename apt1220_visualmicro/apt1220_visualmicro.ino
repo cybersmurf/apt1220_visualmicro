@@ -1000,13 +1000,13 @@ void tDEMOscreen() {
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
-        String tmpConnType = " eMISTR 2025   ";
+        String tmpConnType = "eMISTR 2025   ";
         tmpConnType += useWifi ? "WIFI" : " ETH";
         lcd2.printf(tmpConnType.c_str());
     }
     if (key_maker == 1) {
         lcd2.setCursor(0, 0);
-        lcd2.printf(" eMISTR 20225 DVERE ");
+        lcd2.printf(" eMISTR 2025 DVERE ");
     }
 
     lcd2.setCursor(0, 1);
@@ -1510,10 +1510,13 @@ void TCP() {
                 lcd2.printf("%s", buffer + 2);
                 break;
             case 6:
-                blank_line(0);
+                //blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
 				//lcd2.print(buffer + 2);
-				lcd2.printf("%s", "prdel1");
+                lcd2.setCursor(0, 0);
+				//lcd2.printf("%s", " prdel1");
+				buffer[0] = ' ';
+                lcd2.print(" prdel1");
 
                 break;
             case 7:
