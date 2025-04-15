@@ -89,22 +89,22 @@ static char __attribute__((section(".noinit"))) ip_adr[16];
 static char __attribute__((section(".noinit"))) ip_mask[16];
 static char __attribute__((section(".noinit"))) ip_server[16];
 static char __attribute__((section(".noinit"))) ip_gate[16];
-static unsigned long last_ping;      // DISPLAY NAME timeout
+static unsigned long last_ping;                                     // cas od posledni komunikace s PC
 static int __attribute__((section(".noinit")))  ping_timeout;		// DISPLAY NAME timeout
-static int __attribute__((section(".noinit")))  key_maker = 0;    // 0 - jedna se o pracanta
-// 1 - jedna se o zamek
+static int __attribute__((section(".noinit")))  key_maker = 0;      // 0 - jedna se o pracanta
+                                                                    // 1 - jedna se o zamek
 static long __attribute__((section(".noinit"))) timeout1;
 static long __attribute__((section(".noinit"))) timeout2;
 
-static int __attribute__((section(".noinit")))  rfid_reader_c;  // 0 - normalni èteèka
-static int __attribute__((section(".noinit")))  id12_c;         // 0 - normalni èteèka
-// 1 - rfid modul
-static int __attribute__((section(".noinit")))  rfid_reader_d;  // 0 - normalni èteèka
-static int __attribute__((section(".noinit")))  id12_d;         // 0 - normalni èteèka
-// 1 - rfid modul
+static int __attribute__((section(".noinit")))  rfid_reader_c;      // 0 - normalni èteèka
+static int __attribute__((section(".noinit")))  id12_c;             // 0 - normalni èteèka
+                                                                    // 1 - rfid modul
+static int __attribute__((section(".noinit")))  rfid_reader_d;      // 0 - normalni èteèka
+static int __attribute__((section(".noinit")))  id12_d;             // 0 - normalni èteèka
+                                                                    // 1 - rfid modul
 
-static long __attribute__((section(".noinit"))) timer1;		      // DISPLAY NAME timeout
-static long __attribute__((section(".noinit"))) timer2;		      // CONFIRM TIMEOUT
+static long __attribute__((section(".noinit"))) timer1;		        // DISPLAY NAME timeout
+static long __attribute__((section(".noinit"))) timer2;		        // CONFIRM TIMEOUT
 static long __attribute__((section(".noinit"))) timer3;
 static char __attribute__((section(".noinit"))) op_c[16];
 static char __attribute__((section(".noinit"))) op_d[16];
@@ -128,14 +128,22 @@ long r_time;
 static int net_on;
 int saved;
 
-static unsigned long __attribute__((section(".noinit"))) fifo_start;
-static unsigned long __attribute__((section(".noinit"))) fifo_end;
-static unsigned long __attribute__((section(".noinit"))) fifo_first;
-static unsigned long __attribute__((section(".noinit"))) fifo_last;
+//static unsigned long __attribute__((section(".noinit"))) fifo_start;
+//static unsigned long __attribute__((section(".noinit"))) fifo_end;
+//static unsigned long __attribute__((section(".noinit"))) fifo_first;
+//static unsigned long __attribute__((section(".noinit"))) fifo_last;
+
+static unsigned long  fifo_start = 0;
+static unsigned long  fifo_end = 64000;
+static unsigned long  fifo_first = 0;
+static unsigned long  fifo_last = 0;
 
 static unsigned long physaddr;
 
-char __attribute__((section(".noinit"))) off_buffer[251];
+char buffer[251] = { 0 };
+
+char off_buffer[251] = { 0 };
+//char __attribute__((section(".noinit"))) off_buffer[251];
 #define off_buffer_size 250    // OFFLINE BUFFER SIZE - maximu
 static unsigned long SEC_TIMER;
 
@@ -153,6 +161,8 @@ const int serverPort = 54321;
 const bool vSerialDebug = true;
 const int  vLogLevel = 0;
 
+const char* bufferFilePath = "/apt1220/aptbuffer.txt"; // Definujeme cestu k souboru
+
 static bool useWifi = false;
 static bool useETH = true;
 
@@ -164,7 +174,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-const String localVersion = "1.0.0.1";
+const String localVersion = "1.0.0.2";
 // URL k souboru, kde je uvedena aktuální verze firmware na serveru
 const char* versionURL = "http://192.168.222.114:82/ota_update/version.txt";
 // URL k novému firmware (binární soubor)
@@ -174,7 +184,7 @@ const char* firmwareURL = "http://192.168.222.114:82/ota_update/firmware.bin";
 TaskHandle_t otaTaskHandle = NULL;
 bool otaInProgress = false;
 bool otaUpdateAvailable = false;
-String currentVersion = "1.0.0.1";
+String currentVersion = "1.0.0.2";
 String newVersion = "";
 
 Preferences preferences;
@@ -220,7 +230,8 @@ void setup_inifile() {
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
     createDir(LittleFS, "/apt1220"); // Create a mydir folder
-    writeFile(LittleFS, "/apt1220/aptbuffer.txt", ""); // Create a hello1.txt file with the content "Hello1"
+    //writeFile(LittleFS, "/apt1220/aptbuffer.txt", ""); // Create a hello1.txt file with the content "Hello1"
+    writeFile(LittleFS, bufferFilePath, "");
 }
 
 void initializeHardware() {
@@ -231,21 +242,53 @@ void initializeHardware() {
 }
 
 void initializeFileSystem() {
+    // Pokusíme se pøipojit LittleFS, formátovat pokud selže
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
-        Serial.println("LittleFS Mount Failed");
-        return;
+        Serial.println("LittleFS Mount Failed initially.");
+
+        // --- Pøidáno: Explicitní pokus o formátování ---
+        Serial.println("Attempting to format LittleFS...");
+        if (LittleFS.format()) {
+            Serial.println("LittleFS formatted successfully.");
+            // Zkusíme pøipojit znovu po formátování
+            if (!LittleFS.begin()) {
+                Serial.println("LittleFS Mount Failed even after format!");
+                return; // Ukonèíme, pokud ani po formátu nelze pøipojit
+            }
+            Serial.println("LittleFS Mounted successfully after format.");
+        }
+        else {
+            Serial.println("LittleFS format failed.");
+            return; // Ukonèíme, pokud formátování selže
+        }
+        // --- Konec pøidaného kódu ---
+
     }
-    else
-    {
+    else {
         Serial.println("LittleFS Mount Successful");
     }
-	
-    if (!LittleFS.exists("/apt1220/aptbuffer.txt")) {
+
+
+    if (!LittleFS.exists(bufferFilePath)) {
         reset_buffer_file();
     }
     else
     {
-		Serial.println("Buffer file exists");
+        Serial.print("Buffer file exists: ");
+        Serial.println(bufferFilePath);
+
+        File bufferFile = LittleFS.open(bufferFilePath, FILE_READ); // Otevøeme soubor pro ètení
+        if (bufferFile) {
+            size_t fileSize = bufferFile.size(); // Získáme velikost souboru
+            Serial.print(" -> Size: ");
+            Serial.print(fileSize);
+            Serial.println(" bytes");
+            bufferFile.close(); // Zavøeme soubor
+        }
+        else {
+            Serial.println(" -> Error: Failed to open buffer file to get size.");
+        }
+
     }
 }
 
@@ -654,6 +697,32 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 lcd2.printf("%s", buffer2);
             }
         }
+
+        if (SerialD.available() > 0) {
+            int len = SerialD.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
+            buffer2[len] = '\0';  // Null-terminate the string
+
+            if (strcmp(buffer2, "STORNO") == 0) {
+                break;
+            }
+            else if (strcmp(buffer2, "OK") == 0) {
+                strncpy(data_to_fill, new_data, sizeof(new_data));
+                break;
+            }
+            else if (strcmp(buffer2, "DEFAULT") == 0) {
+                if (strlen(new_data) > 0) {
+                    new_data[strlen(new_data) - 1] = '\0';
+                    lcd2.setCursor(strlen(new_data) + 4, 2);
+                    lcd2.printf(" ");
+                    lcd2.setCursor(strlen(new_data) + 4, 2);
+                }
+            }
+            else {
+                strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
+                lcd2.printf("%s", buffer2);
+            }
+        }
+
     }
 }
 
@@ -738,8 +807,7 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
-    //xSemaphoreTake(demoMutex, portMAX_DELAY);
-	fast_clear_disp();
+    if ((millis() / 1000) >= timeout1) { fast_clear_disp(); }
 
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
@@ -947,18 +1015,21 @@ void serial(char* buffer2, int port) {
             break;
         }
 
-        strcat(tmp, buffer2);
+        //strcat(tmp, buffer2);
+		strcat(tmp, buffer2String.c_str());
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
             blank_line(2);
-            lcd2.printf("%s", buffer2);
+            //lcd2.printf("%s", buffer2);
+			lcd2.printf("%s", buffer2String.c_str());
         }
 
         // Pøidání èasu k pøíkazùm typu D, E, J atd.
         if (strchr("DEJ0123456789", buffer2[0])) {
             strcat(tmp, "~");
-            get_time(SEC_TIMER, buffer);
+            //get_time(SEC_TIMER, buffer);
+            get_time(buffer);
             strcat(tmp, buffer);
         }
 
@@ -969,18 +1040,23 @@ void serial(char* buffer2, int port) {
         else {
             strcat(off_buffer, tmp);
         }
+        
 
-        if (!net_on && strchr("D0123456789", buffer2[0]) &&
+        if ((!net_on && strchr("D0123456789", buffer2[0])) &&
             ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
+            //lcd2.printf("%s", buffer2);
             strncpy((char*)fifo_last, off_buffer, strlen(off_buffer));
+
+            //appendFile(LittleFS, bufferFilePath, tmp);
+
             fifo_last += strlen(off_buffer) + 1;
 
             lcd2.setCursor(0, 0);
             lcd2.printf("*------------------*");
             lcd2.setCursor(0, 1);
-            lcd2.printf("|      ULOZENO     |");
+            lcd2.printf("|      ULOZENO     |");
             lcd2.setCursor(0, 2);
-            lcd2.printf("|     DO PAMETI    |");
+            lcd2.printf("|     DO PAMETI    |");
             lcd2.setCursor(0, 3);
             lcd2.printf("*------------------*");
 
@@ -989,8 +1065,6 @@ void serial(char* buffer2, int port) {
             memset(off_buffer, 0x00, off_buffer_size);
         }
     }
-
-    //xSemaphoreGive(demoMutex);
 }
 
 void tDEMOscreen() {
@@ -1000,8 +1074,8 @@ void tDEMOscreen() {
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
-        String tmpConnType = "eMISTR 2025   ";
-        tmpConnType += useWifi ? "WIFI" : " ETH";
+        String tmpConnType = " eMISTR 2025   ";
+        tmpConnType += useWifi ? "WIFI" : " ETH ";
         lcd2.printf(tmpConnType.c_str());
     }
     if (key_maker == 1) {
@@ -1307,6 +1381,23 @@ void get_time(unsigned long thetime, char* buff) {
     );
 }
 
+void get_time(char* buff) {
+    //DateTime now;
+
+    // Získání aktuálního èasu
+    //now = rtc2.getDateTime();
+
+    // Vytvoøení formátovaného øetìzce s datem a èasem
+    sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
+        rtc2.getYear(),          // Rok (plný, napø. 2024)
+        rtc2.getMonth(),         // Mìsíc (1-12)
+        rtc2.getDay(),           // Den (1-31)
+        rtc2.getHours(),          // Hodiny (0-23)
+        rtc2.getMinutes(),        // Minuty (0-59)
+        rtc2.getSeconds()         // Sekundy (0-59)
+    );
+}
+
 void print_time(unsigned long thetime, char* buff)
 {
     struct tm	thetm;
@@ -1440,6 +1531,10 @@ void TCP() {
             };
 
             logToSerial(buffer, 0);
+
+            String buffer2String = buffer + 2;
+            buffer2String.trim();
+
             // Ovìøení pøíchozího pøíkazu
             switch (buffer[0]) {
             case 2:  // Nastavení èasu
@@ -1503,25 +1598,27 @@ void TCP() {
 
             case 4:
                 blank_line(3);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+				lcd2.printf("%s", buffer2String);
                 break;
             case 5:
                 blank_line(1);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 6:
                 //blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
 				//lcd2.print(buffer + 2);
-                lcd2.setCursor(0, 0);
-				//lcd2.printf("%s", " prdel1");
-				buffer[0] = ' ';
-                lcd2.print(" prdel1");
+				lcd2.printf("%s", "prdel1");
 
+				//lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 7:
                 blank_line(2);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 0xB:  // Nastavení timeoutu
                 timer1 = atoi(buffer + 2);
@@ -1534,8 +1631,11 @@ void TCP() {
                 lcd2.printf("*------------------*");
                 lcd2.setCursor(0, 1);
                 lcd2.printf("|                  |");
-                lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
-                lcd2.printf("%s", buffer + 2);
+                //lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
+				logToSerial(buffer, 1);
+                lcd2.setCursor(((20 - buffer2String.length()) / 2) + 0, 1);
+                //lcd2.printf("%s", buffer + 2);
+                lcd2.printf("%s", buffer2String);
                 lcd2.setCursor(0, 2);
                 lcd2.printf("*------------------*");
 
