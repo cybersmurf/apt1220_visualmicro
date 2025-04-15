@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 /apt1220_visualmicro.sln
 /apt1220_visualmicro/apt1220_visualmicro.ino
+/apt1220_visualmicro/apt1220_visualmicro.vcxproj
+/apt1220_visualmicro/__vm/Compile.vmps.xml
