@@ -1038,31 +1038,43 @@ void serial(char* buffer2, int port) {
             client.print(tmp);
         }
         else {
-            strcat(off_buffer, tmp);
-        }
-        
+            //strcat(off_buffer, tmp);
+            // --- Kontrola velikosti PØED strcat (z minulé úpravy) ---
+            if (strlen(off_buffer) + strlen(tmp) < sizeof(off_buffer)) {
+                strcat(off_buffer, tmp); // Pøidat do off_buffer, jen pokud se vejde
+            }
+            else {
+                Serial.println("CHYBA: off_buffer je plny, nelze pripojit zpravu:");
+                Serial.print(tmp);
+            }
+            // --- Konec kontroly velikosti ---
 
-        if ((!net_on && strchr("D0123456789", buffer2[0])) &&
-            ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
-            //lcd2.printf("%s", buffer2);
-            strncpy((char*)fifo_last, off_buffer, strlen(off_buffer));
+            if (!net_on && strchr("D0123456789", buffer2[0])) {
+                //&& ((long)(fifo_end - fifo_last) >= off_buffer_size))
 
-            //appendFile(LittleFS, bufferFilePath, tmp);
+                //lcd2.printf("%s", buffer2);
 
-            fifo_last += strlen(off_buffer) + 1;
+                //strncpy((char*)fifo_last, off_buffer, strlen(off_buffer));
 
-            lcd2.setCursor(0, 0);
-            lcd2.printf("*------------------*");
-            lcd2.setCursor(0, 1);
-            lcd2.printf("|      ULOZENO     |");
-            lcd2.setCursor(0, 2);
-            lcd2.printf("|     DO PAMETI    |");
-            lcd2.setCursor(0, 3);
-            lcd2.printf("*------------------*");
+                //appendFile(LittleFS, bufferFilePath, tmp);
+                appendFile(LittleFS, bufferFilePath, off_buffer);
 
-            saved = 1;
-            timeout1 = SEC_TIMER + timer2;
-            memset(off_buffer, 0x00, off_buffer_size);
+                //fifo_last += strlen(off_buffer) + 1;
+
+                lcd2.setCursor(0, 0);
+                lcd2.printf("*------------------*");
+                lcd2.setCursor(0, 1);
+                lcd2.printf("|      ULOZENO     |");
+                lcd2.setCursor(0, 2);
+                lcd2.printf("|     DO PAMETI    |");
+                lcd2.setCursor(0, 3);
+                lcd2.printf("*------------------*");
+
+                saved = 1;
+                timeout1 = SEC_TIMER + timer2;
+                //memset(off_buffer, 0x00, off_buffer_size);
+                memset(off_buffer, 0x00, sizeof(off_buffer));
+            }
         }
     }
 }
@@ -1129,7 +1141,8 @@ void loop() {
     if (net_on) {
         TCP();
         if ((long)(fifo_last - fifo_start) > 0) {
-            send_buffer();
+            //send_buffer();
+            send_file_buffer();
         }
     }
 
@@ -2192,3 +2205,125 @@ void setupOTA() {
     );
 }
 
+//************************************************************************
+// Nová funkce pro odeslání bufferu ze souboru aptbuffer.txt
+//************************************************************************
+void send_file_buffer() {
+    // 1. Zkontrolujeme, zda jsme online a pøipojeni
+    if (!net_on || !client.connected()) {
+        return; // Nejsme online nebo pøipojeni, nemá smysl pokraèovat
+    }
+
+    // 2. Zkusíme otevøít soubor bufferu pro ètení
+    File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
+    if (!bufferFile || bufferFile.size() == 0) {
+        if (bufferFile) bufferFile.close();
+        return; // Soubor neexistuje nebo je prázdný
+    }
+
+    // 3. Pøeèteme první øádek (zprávu) ze souboru
+    String lineToSend = "";
+    if (bufferFile.available()) {
+        lineToSend = bufferFile.readStringUntil('\n');
+    }
+
+    if (lineToSend.length() == 0) {
+        bufferFile.close(); // Nic jsme nepøeèetli (možná chyba nebo jen prázdný øádek na zaèátku)
+        // Mùžeme zkusit soubor promazat, pokud obsahuje jen bílé znaky? Prozatím ne.
+        return;
+    }
+
+    // Pøidáme zpìt znak nového øádku, pokud ho readStringUntil odstranil a server ho vyžaduje
+    lineToSend += "\n";
+
+    Serial.print("Attempting to send from file buffer: ");
+    Serial.print(lineToSend);
+
+    // 4. Pokusíme se odeslat první øádek
+    bool send_success = false;
+    if (client.print(lineToSend)) {
+        client.flush(); // Poèkáme na odeslání
+        Serial.println(" - Sent, waiting for confirmation...");
+
+        // 5. Èekáme na potvrzení od serveru (podobnì jako v pùvodním send_buffer)
+        //    Použijeme jednoduchý mechanismus ètení s timeoutem
+        unsigned long confirm_timeout = millis() + 3000; // Timeout 3 sekundy na odpovìï
+        String response = "";
+        while (millis() < confirm_timeout) {
+            if (client.available()) {
+                response = client.readStringUntil('\n');
+                response.trim(); // Odstraníme bílé znaky
+                Serial.print(" - Received response: ");
+                Serial.println(response);
+                // Zde pøedpokládáme, že server pošle nìco specifického pro potvrzení
+                // Pùvodní kód èekal na odpovìï zaèínající na 0x7E (~)
+                // Upravte podmínku podle vaší serverové logiky
+                if (response.length() > 0 && response.startsWith("~")) { // Pøíklad: odpovìï zaèíná '~'
+                    send_success = true;
+                    last_ping = SEC_TIMER; // Aktualizujeme last_ping
+                    break;
+                }
+            }
+            delay(10); // Krátká pauza, aby nebìžela smyèka naplno
+        }
+        if (!send_success) {
+            Serial.println(" - Confirmation failed or timed out.");
+        }
+
+    }
+    else {
+        Serial.println(" - Client print failed.");
+        setNetOn(0, 20); // Pravdìpodobnì problém se spojením
+        bufferFile.close();
+        return;
+    }
+
+    // 6. Pokud odeslání a potvrzení probìhlo úspìšnì, pøepíšeme soubor bez odeslaného øádku
+    if (send_success) {
+        Serial.println(" - Send successful. Removing line from buffer file.");
+
+        // Otevøeme doèasný soubor pro zápis
+        File tempFile = LittleFS.open("/apt1220/aptbuffer.tmp", FILE_WRITE);
+        if (!tempFile) {
+            Serial.println("Error: Failed to open temporary buffer file for writing!");
+            bufferFile.close();
+            return;
+        }
+
+        // Zkopírujeme zbytek pùvodního souboru (od druhého øádku dál) do doèasného
+        char copyBuf[128]; // Buffer pro kopírování
+        while (bufferFile.available()) {
+            int bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf));
+            if (bytesRead > 0) {
+                tempFile.write((uint8_t*)copyBuf, bytesRead);
+            }
+        }
+
+        // Zavøeme oba soubory
+        bufferFile.close();
+        tempFile.close();
+
+        // Smažeme pùvodní soubor a pøejmenujeme doèasný
+        if (LittleFS.remove(bufferFilePath)) {
+            if (LittleFS.rename("/apt1220/aptbuffer.tmp", bufferFilePath)) {
+                Serial.println(" - Buffer file updated successfully.");
+            }
+            else {
+                Serial.println("Error: Failed to rename temporary buffer file!");
+                // Pokusíme se smazat i doèasný soubor, pokud pøejmenování selhalo
+                LittleFS.remove("/apt1220/aptbuffer.tmp");
+            }
+        }
+        else {
+            Serial.println("Error: Failed to remove original buffer file!");
+            // Pokusíme se smazat i doèasný soubor
+            LittleFS.remove("/apt1220/aptbuffer.tmp");
+        }
+
+    }
+    else {
+        // Pokud odeslání selhalo, soubor nemìníme, zavøeme ho a zkusíme to znovu pozdìji
+        Serial.println(" - Send failed. Buffer file remains unchanged.");
+        bufferFile.close();
+    }
+}
