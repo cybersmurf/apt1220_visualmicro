@@ -1739,9 +1739,10 @@ void TCP() {
                 lcd2.printf("%s", buffer2String);
                 break;
             case 6:
-                blank_line(0);
+                //blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
 				//lcd2.print(buffer + 2);
+				lcd2.printf("%s", "prdel1");
 
 				//lcd2.printf("%s", buffer + 2);
                 lcd2.printf("%s", buffer2String);
