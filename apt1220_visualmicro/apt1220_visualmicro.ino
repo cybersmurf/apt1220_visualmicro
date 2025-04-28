@@ -92,16 +92,16 @@ static char __attribute__((section(".noinit"))) ip_gate[16];
 static unsigned long last_ping;                                     // cas od posledni komunikace s PC
 static int __attribute__((section(".noinit")))  ping_timeout;		// DISPLAY NAME timeout
 static int __attribute__((section(".noinit")))  key_maker = 0;      // 0 - jedna se o pracanta
-                                                                    // 1 - jedna se o zamek
+// 1 - jedna se o zamek
 static long __attribute__((section(".noinit"))) timeout1;
 static long __attribute__((section(".noinit"))) timeout2;
 
 static int __attribute__((section(".noinit")))  rfid_reader_c;      // 0 - normalni èteèka
 static int __attribute__((section(".noinit")))  id12_c;             // 0 - normalni èteèka
-                                                                    // 1 - rfid modul
+// 1 - rfid modul
 static int __attribute__((section(".noinit")))  rfid_reader_d;      // 0 - normalni èteèka
 static int __attribute__((section(".noinit")))  id12_d;             // 0 - normalni èteèka
-                                                                    // 1 - rfid modul
+// 1 - rfid modul
 
 static long __attribute__((section(".noinit"))) timer1;		        // DISPLAY NAME timeout
 static long __attribute__((section(".noinit"))) timer2;		        // CONFIRM TIMEOUT
@@ -159,7 +159,7 @@ static char ssid[32] = "AGERIT_AC 2GHz";
 static char password[32] = "AGERITagerit512";
 //static char* ssid = "blackies";
 //static char* password = "Blackies105111";
-const char* serverIP = "192.168.225.221";
+const char* serverIP = "192.168.88.221";
 const int serverPort = 54321;
 
 const bool vSerialDebug = true;
@@ -332,7 +332,7 @@ void initializeDisplay() {
     delay(200);
     lcd2.printf("       eMISTR       ");
     lcd2.setCursor(0, 2);
-	lcd2.printf("  Verze: %s", VERZE_PRACANT);
+    lcd2.printf("  Verze: %s", VERZE_PRACANT);
     delay(200);
     //rtc2.setHourMode(CLOCK_H24);
     //rtc2.startClock();
@@ -352,7 +352,7 @@ void setup() {
     //rtc2.begin();
     //rtc2.set_12hour_mode(false);
     rtc2.setHourMode(CLOCK_H24);
-	//rtc2.setYear(2021);
+    //rtc2.setYear(2021);
 
     if (!rtc2.isRunning()) {
         Serial.println("RTC is NOT running, let's set the time!");
@@ -361,8 +361,8 @@ void setup() {
         rtc2.startClock();
     }
 
-	initializeHardware();
-	initializeFileSystem();
+    initializeHardware();
+    initializeFileSystem();
 
 
     ///vypnutí použití EEPROM a EspConfigLib
@@ -373,35 +373,35 @@ void setup() {
 
     delay(100);
 
-	loadConfiguration();
+    loadConfiguration();
 
-	initializeNetwork();
+    initializeNetwork();
 
     // Kontrola aktualizací již pøi spuštìní
     //checkForUpdates();
 
-	initializeTasks();
+    initializeTasks();
 
     // Inicializace OTA
     setupOTA();
 
-	initializeDisplay();
+    initializeDisplay();
 
 
     // Create mutex for safe LCD access
     demoMutex = xSemaphoreCreateMutex();
 
-/*
-    // Create the task that will handle the demo function
-    xTaskCreate(
-        tDEMOcode,          // Function to implement the task
-        "DemoTask",        // Name of the task
-        2048,              // Stack size in words
-        NULL,              // Task input parameter
-        1,                 // Priority of the task
-        &tDEMO    // Task handle
-    );
-*/
+    /*
+        // Create the task that will handle the demo function
+        xTaskCreate(
+            tDEMOcode,          // Function to implement the task
+            "DemoTask",        // Name of the task
+            2048,              // Stack size in words
+            NULL,              // Task input parameter
+            1,                 // Priority of the task
+            &tDEMO    // Task handle
+        );
+    */
 
     /*
       char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
@@ -470,7 +470,7 @@ boolean load_config() {
     preferences.begin("my-app", true);
     sprintf(ip_adr, preferences.getString("ip_adr", "192.168.222.202").c_str());
     sprintf(ip_mask, preferences.getString("ip_mask", "255.255.255.0").c_str());
-    sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
+    sprintf(ip_server, preferences.getString("ip_server", "192.168.88.221").c_str());
     sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
     timer1 = preferences.getInt("timer1", 5);
     timer2 = preferences.getInt("timer2", 3);
@@ -944,7 +944,7 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-PASSW")) {
         //SSID PASSWORD 
-        reader_input("Nastavení hesla", password);                
+        reader_input("Nastavení hesla", password);
     }
     else if (buffer2String.equals("SHOW-NET")) {
         //SSID PASSWORD 
@@ -1020,13 +1020,13 @@ void serial(char* buffer2, int port) {
         }
 
         //strcat(tmp, buffer2);
-		strcat(tmp, buffer2String.c_str());
+        strcat(tmp, buffer2String.c_str());
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
             blank_line(2);
             //lcd2.printf("%s", buffer2);
-			lcd2.printf("%s", buffer2String.c_str());
+            lcd2.printf("%s", buffer2String.c_str());
         }
 
         // Pøidání èasu k pøíkazùm typu D, E, J atd.
@@ -1121,7 +1121,7 @@ void serial(char* buffer2, int port) {
                     saved = 1;
                     timeout1 = SEC_TIMER + timer2;
 
-                    memset(off_buffer, 0x00, sizeof(off_buffer)); 
+                    memset(off_buffer, 0x00, sizeof(off_buffer));
                 }
                 // --- Konec zápisu do souboru ---
             }
@@ -1158,14 +1158,14 @@ void tDEMOscreen() {
     //print_time(SEC_TIMER, buffer2);
 
     //DateTime now = rtc2.now();
-	//String nowStr = now.timestamp(DateTime::TIMESTAMP_FULL);
+    //String nowStr = now.timestamp(DateTime::TIMESTAMP_FULL);
 
     //lcd2.print(nowStr);
-    
-    print_time(rtc2.getEpoch() , buffer2);
+
+    print_time(rtc2.getEpoch(), buffer2);
 
     //logToSerial(rtc2.getDateTimeString() , 1);
-	//logToSerial(nowStr.c_str(), 1);
+    //logToSerial(nowStr.c_str(), 1);
     //logToSerial(buffer2,1);
 
     //print_time(rtc2.now().unixtime(), buffer2);
@@ -1173,19 +1173,19 @@ void tDEMOscreen() {
     lcd2.printf(buffer2);
     lcd2.setCursor(0, 3);
 
-/*
-    lcd2.printf(net_on ? "      ON-LINE       " : "OFF-LINE");
+    /*
+        lcd2.printf(net_on ? "      ON-LINE       " : "OFF-LINE");
 
-    if (!net_on) {
-        if ((long)(fifo_end - fifo_last) < off_buffer_size) {
-            lcd2.printf(" PLNA Pamet! ");
+        if (!net_on) {
+            if ((long)(fifo_end - fifo_last) < off_buffer_size) {
+                lcd2.printf(" PLNA Pamet! ");
+            }
+            else {
+                int volno = ((fifo_end - fifo_last) * 100) / off_buffer_size;
+                lcd2.printf(" volno: %d%% ", volno);
+            }
         }
-        else {
-            int volno = ((fifo_end - fifo_last) * 100) / off_buffer_size;
-            lcd2.printf(" volno: %d%% ", volno);
-        }
-    }
-*/
+    */
 
     if (net_on) {
         if (isSendingFileBuffer) {
@@ -1219,8 +1219,21 @@ void tDEMOscreen() {
 
         }
         else {
-            // Chyba pøi otevírání souboru bufferu
-            lcd2.print("OFF-LINE (File ERR)");
+            Serial.printf("tDEMOscreen: Failed to open buffer file '%s' for reading size.\n", bufferFilePath);
+
+            // --- Pokus o zotavení: Zkontrolovat existenci a pøípadnì vytvoøit ---
+            if (!LittleFS.exists(bufferFilePath)) {
+                // Soubor skuteènì neexistuje
+                Serial.println("tDEMOscreen: Buffer file does not exist. Attempting recreation...");
+                lcd2.print("OFF-LINE (NEW FILE)"); // Indikace pokusu o vytvoøení na LCD
+                reset_buffer_file(); // Zavoláme funkci, která vytvoøí adresáø a prázdný soubor
+            }
+            else {
+                // Soubor existuje, ale pøesto nešel otevøít -> Pravdìpodobnì chyba FS
+                Serial.println("tDEMOscreen: Buffer file exists but cannot be opened (FS Error?). Displaying error.");
+                lcd2.print("OFF-LINE (File ERR)"); // Zobrazíme pùvodní chybovou hlášku
+            }
+            // --- Konec pokusu o zotavení ---
         }
     }
 }
@@ -1249,7 +1262,7 @@ void loop() {
     } // konec if(net_on)
 
     //loop_bbbb();
-	//tDEMOscreen();
+    //tDEMOscreen();
     if ((millis() / 1000) >= timeout1) { tDEMOscreen(); }
 
     // Periodická kontrola, napøíklad každou minutu (pro demonstraci)
@@ -1329,7 +1342,7 @@ void tDEMOcode(void* parameter) {
         // Acquire mutex before accessing the LCD
         if (xSemaphoreTake(demoMutex, portMAX_DELAY) == pdTRUE) {
             //tDEMOrun();
-            if ((millis()/1000)>=timeout1) { tDEMOscreen(); }
+            if ((millis() / 1000) >= timeout1) { tDEMOscreen(); }
             // Release the mutex
             xSemaphoreGive(demoMutex);
         }
@@ -1434,7 +1447,7 @@ void WiFiEvent(WiFiEvent_t event)
         Serial.println("ETH Started");
         //set eth hostname here
         //ETH.setHostname("esp32-ethernet");
-		setHostname();
+        setHostname();
         //ETH.setHostname( ETH.macAddress().c_str() );
         break;
 
@@ -1691,7 +1704,7 @@ void TCP() {
 
                 //rtc2.setEpoch(rtc.getEpoch());
 
-               
+
                 rtc2.stopClock();
                 rtc2.setDate(thetm.tm_mday, thetm.tm_mon, atoi(buffer + 2));
 
@@ -1731,7 +1744,7 @@ void TCP() {
             case 4:
                 blank_line(3);
                 //lcd2.printf("%s", buffer + 2);
-				lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer2String);
                 break;
             case 5:
                 blank_line(1);
@@ -1739,12 +1752,12 @@ void TCP() {
                 lcd2.printf("%s", buffer2String);
                 break;
             case 6:
-                //blank_line(0);
+                blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
-				//lcd2.print(buffer + 2);
-				lcd2.printf("%s", "prdel1");
+                //lcd2.print(buffer + 2);
+                //lcd2.printf("%s", "prdel1");
 
-				//lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer + 2);
                 lcd2.printf("%s", buffer2String);
                 break;
             case 7:
@@ -1764,10 +1777,10 @@ void TCP() {
                 lcd2.setCursor(0, 1);
                 lcd2.printf("|                  |");
                 //lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
-				logToSerial(buffer, 1);
+                logToSerial(buffer, 1);
                 lcd2.setCursor(((20 - buffer2String.length()) / 2) + 0, 1);
-                //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer + 2);
+                //lcd2.printf("%s", buffer2String);
                 lcd2.setCursor(0, 2);
                 lcd2.printf("*------------------*");
 
@@ -2449,164 +2462,175 @@ void send_file_buffer() {
 }
 
 //************************************************************************
-// Nová funkce pro odeslání CELÉHO bufferu ze souboru aptbuffer.txt
-// Zpracuje celý soubor v jedné operaci (s yield() uvnitø)
+// OPRAVENÁ funkce pro odeslání CELÉHO bufferu ze souboru aptbuffer.txt
+// Verze 2: Opravena logika kontroly potvrzení dle logu.
 //************************************************************************
 void send_entire_file_buffer() {
-    // Zkontrolujeme, zda jsme online a pøipojeni
+    // 1. Kontrola sítì
     if (!net_on || !client.connected()) {
-        Serial.println("DEBUG: Cannot send file buffer - offline or disconnected.");
         return;
     }
 
+    // 2. Kontrola existence a velikosti souboru
     File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
     if (!bufferFile || bufferFile.size() == 0) {
         if (bufferFile) bufferFile.close();
-        // Serial.println("DEBUG: Buffer file is empty or does not exist.");
-        return; // Nic k odeslání
+        return;
     }
 
     Serial.println(">>> Starting to send entire file buffer... <<<");
-    bool all_sent_successfully = true; // Pøedpokládáme úspìch, dokud nenastane chyba
+    bool any_error_occurred = false;
     String tempFileName = "/apt1220/aptbuffer.tmp";
+    bool tempFileCreated = false;
+    File tempFile;
 
-    // Otevøeme doèasný soubor pro zápis pøípadných neodeslaných øádkù
-    File tempFile = LittleFS.open(tempFileName, FILE_WRITE);
-    if (!tempFile) {
-        Serial.println("CHYBA: Nelze otevrit docasny soubor bufferu!");
-        bufferFile.close();
-        return; // Nemùžeme spolehlivì pokraèovat
-    }
-
-    // Zobrazit stav na LCD
+    // LCD indikace
     lcd2.setCursor(0, 0); lcd2.print("*------------------*");
     lcd2.setCursor(0, 1); lcd2.print("|  ODESILAM BUFFER |");
     lcd2.setCursor(0, 2); lcd2.print("|    ZE SOUBORU    |");
     lcd2.setCursor(0, 3); lcd2.print("*------------------*");
 
-    // Smyèka pro ètení a odesílání øádkù
+    // 3. Smyèka pro ètení a odeslání øádkù
     while (bufferFile.available()) {
-
-        // Uvolníme procesor pro jiné úlohy a watchdog
-        yield(); // Nebo vTaskDelay(1); pokud máte RTOS úlohy s nižší prioritou
-        // Pokud používáte watchdog timer a tato funkce trvá dlouho:
-        // esp_task_wdt_reset(); 
+        yield();
+        // esp_task_wdt_reset(); // Reset watchdogu v pøípadì potøeby
 
         String lineToSend = bufferFile.readStringUntil('\n');
-
-        // Pøeskoèíme potenciální prázdné øádky
-        if (lineToSend.length() == 0 && bufferFile.available()) {
-            continue;
-        }
-        // Pokud je to poslední øádek bez '\n', readStringUntil ho vrátí.
-        // Pokud poslední øádek má '\n', readStringUntil ho odstraní.
-        // Pro konzistenci pøidáme '\n' vždy. Server musí být schopen zpracovat i pøípadný prázdný øádek na konci.
+        if (lineToSend.length() == 0 && bufferFile.available()) { continue; }
         lineToSend += "\n";
 
         Serial.print("Sending: "); Serial.print(lineToSend);
 
-        bool send_success = false;
-        // Odeslání dat
-        if (client.print(lineToSend)) {
-            // client.flush(); // flush mùže být blokující, radìji poèkáme na odpovìï
-            Serial.print(" - Sent, waiting confirmation...");
+        bool send_attempt_failed = false;
+        bool confirmation_failed = false;
 
-            // Èekání na potvrzení
-            unsigned long confirm_timeout = millis() + 3000; // 3s timeout
+        // 4. Pokus o odeslání
+        if (client.print(lineToSend)) {
+            Serial.print(" - Sent, waiting confirm...");
+
+            // 5. Èekání na potvrzení
+            unsigned long confirm_timeout = millis() + 3000;
             String response = "";
+            bool confirmation_received = false;
             while (millis() < confirm_timeout) {
                 if (client.available()) {
-                    response = client.readStringUntil('\n'); // Pøeèíst odpovìï
-                    response.trim();
-                    Serial.print(" Resp: "); Serial.print(response);
-                    // Zde upravte logiku kontroly odpovìdi podle vašeho serveru!
-                    if (response.length() > 0 && response.startsWith("~")) {
-                        send_success = true;
-                        last_ping = SEC_TIMER;
-                        break; // Potvrzení pøijato
+                    // Èteme VŠECHNO co pøišlo, dokud nepøijde OK nebo nevyprší timeout
+                    // Protože server mùže poslat více odpovìdí pøed OK
+                    while (client.available()) {
+                        response = client.readStringUntil('\n');
+                        response.trim();
+                        Serial.print(" Resp: "); Serial.print(response);
+                        // --- ZDE JE ZMÌNA: Kontrola odpovìdi "OK" ---
+                        if (response.equals("OK")) {
+                            confirmation_received = true;
+                            last_ping = SEC_TIMER;
+                            // Už neèekáme dál na této lince, máme potvrzení
+                            while (client.available()) client.read(); // Vyprázdníme zbytek TCP bufferu pro jistotu
+                            break; // Ukonèíme vnitøní while pro ètení odpovìdi
+                        }
                     }
+                    if (confirmation_received) break; // Ukonèíme i vnìjší while pro timeout
                 }
-                delay(10); // Krátká pauza
+                delay(10);
+            } // konec while pro timeout
+
+            if (confirmation_received) {
+                Serial.println(" - OK");
             }
-            if (send_success) Serial.println(" - OK");
-            else Serial.println(" - FAILED/Timeout");
+            else {
+                Serial.println(" - CONFIRM FAILED/Timeout");
+                confirmation_failed = true;
+                any_error_occurred = true;
+            }
 
         }
-        else { // Selhalo client.print()
-            Serial.println(" - Client print failed.");
-            setNetOn(0, 21); // Oznaèíme jako offline
-            all_sent_successfully = false; // Oznaèíme chybu
-            // Zapíšeme neodeslaný øádek do temp souboru
+        else { // client.print() selhal
+            Serial.println(" - CLIENT PRINT FAILED.");
+            setNetOn(0, 21);
+            send_attempt_failed = true;
+            any_error_occurred = true;
+        }
+
+        // 6. Zpracování výsledku pro daný øádek
+        if (send_attempt_failed || confirmation_failed) {
+            // Otevøít temp soubor, pokud ještì není
+            if (!tempFile) {
+                tempFile = LittleFS.open(tempFileName, FILE_WRITE);
+                if (!tempFile) {
+                    Serial.println("CHYBA: Nelze otevrit docasny soubor pro zapis!");
+                    bufferFile.close();
+                    return;
+                }
+                tempFileCreated = true;
+            }
+            // Zapsat neúspìšný øádek do temp souboru
             tempFile.print(lineToSend);
-            break; // Ukonèíme smyèku odesílání
+
+            if (send_attempt_failed) {
+                Serial.println(" - Stopping send loop due to client print failure.");
+                // Zkopírujeme zbytek pùvodního souboru do temp a ukonèíme
+                char copyBuf[128];
+                while (bufferFile.available()) {
+                    int bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf));
+                    if (bytesRead > 0) tempFile.write((uint8_t*)copyBuf, bytesRead);
+                }
+                break; // Ukonèíme hlavní while smyèku
+            }
+            else {
+                // Selhalo jen potvrzení, pokraèujeme dalším øádkem
+                Serial.println(" - Storing line and continuing to next.");
+            }
+        }
+        else {
+            // Øádek úspìšnì odeslán A potvrzen
+            Serial.println(" - Line processed successfully.");
+            // Nezapisujeme ho do temp souboru
         }
 
-        // Pokud odeslání nebo potvrzení selhalo
-        if (!send_success) {
-            all_sent_successfully = false; // Oznaèíme chybu
-            // Zapíšeme neodeslaný øádek do temp souboru
-            tempFile.print(lineToSend);
-            // Pøerušíme další odesílání v tomto cyklu, protože je problém
-            break;
-        }
-        // Pokud bylo odeslání úspìšné, øádek se *nezapisuje* do temp souboru
-
-        // Kontrola spojení uvnitø smyèky
+        // Kontrola spojení na konci iterace (pojistka)
         if (!net_on || !client.connected()) {
-            Serial.println("Connection lost during buffer send.");
-            all_sent_successfully = false;
-            // Zapíšeme aktuální øádek (který už se neodešle) do temp, pokud ještì nebyl zapsán
-            if (!send_success) { /* Již zapsáno výše */ }
-            else { tempFile.print(lineToSend); } // Zapsat, pokud by se normálnì nezapsal
-            break; // Ukonèit smyèku
+            Serial.println("Connection lost detected at end of loop iteration.");
+            any_error_occurred = true;
+            if (!tempFile) { /* Otevøít tempFile */ tempFileCreated = true; }
+            if (!send_attempt_failed && !confirmation_failed) { // Zapsat poslední øádek, pokud byl OK, ale pak spadlo spojení
+                tempFile.print(lineToSend);
+            }
+            // Zkopírovat zbytek souboru
+            char copyBuf[128];
+            while (bufferFile.available()) {
+                int bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf));
+                if (bytesRead > 0) tempFile.write((uint8_t*)copyBuf, bytesRead);
+            }
+            break;
         }
 
     } // Konec while (bufferFile.available())
 
-    // Po ukonèení smyèky (a už úspìšnì nebo chybou):
-    // Zkopírujeme zbytek pùvodního souboru do doèasného (pokud smyèka skonèila chybou uprostøed)
-    if (!all_sent_successfully) {
-        Serial.println("Copying remaining original buffer to temp file...");
-        char copyBuf[128];
-        while (bufferFile.available()) {
-            int bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf));
-            if (bytesRead > 0) tempFile.write((uint8_t*)copyBuf, bytesRead);
-        }
-    }
-
-    // Zavøeme oba soubory
+    // ... (Zbytek funkce - zavøení souborù a finální operace remove/rename - zùstává stejný jako v minulé odpovìdi) ...
+    // 8. Zavøení souborù
     bufferFile.close();
-    tempFile.close();
+    if (tempFile) tempFile.close();
 
-    // Finální operace se soubory
-    if (all_sent_successfully) {
-        // Vše úspìšnì odesláno, doèasný soubor je prázdný
-        Serial.println("Entire buffer file sent successfully. Removing buffer file.");
-        if (!LittleFS.remove(bufferFilePath)) {
-            Serial.println("Error: Failed to remove original buffer file!");
+    // 9. Finální operace se soubory
+    if (any_error_occurred) {
+        Serial.println("Errors occurred. Replacing original file with remaining data.");
+        if (tempFileCreated) {
+            if (LittleFS.remove(bufferFilePath)) {
+                if (LittleFS.rename(tempFileName, bufferFilePath)) {
+                    Serial.println("Buffer file updated with remaining data.");
+                }
+                else { Serial.println("CHYBA: Nepodarilo se prejmenovat temp soubor!"); }
+            }
+            else { Serial.println("CHYBA: Nepodarilo se smazat puvodni buffer soubor!"); }
         }
-        // Smažeme i prázdný doèasný soubor
-        LittleFS.remove(tempFileName);
+        else { Serial.println("No temp file created, but error occurred? Original file untouched."); }
     }
     else {
-        // Nastala chyba, nebylo vše odesláno. Neodeslaná data jsou v tempFile.
-        Serial.println("Errors occurred during buffer send. Replacing original with temp file (contains unsent lines).");
-        if (LittleFS.remove(bufferFilePath)) { // Smazat pùvodní
-            if (LittleFS.rename(tempFileName, bufferFilePath)) { // Pøejmenovat doèasný na pùvodní
-                Serial.println("Buffer file updated with remaining data.");
-            }
-            else {
-                Serial.println("Error: Failed to rename temp file!");
-                // Ponecháme temp soubor pro pøípadnou manuální kontrolu
-            }
-        }
-        else {
-            Serial.println("Error: Failed to remove original buffer file during update!");
-            // Ponecháme temp soubor
-        }
+        Serial.println("Entire buffer file sent successfully. Removing buffer file.");
+        if (!LittleFS.remove(bufferFilePath)) { Serial.println("CHYBA: Nepodarilo se smazat puvodni buffer soubor!"); }
+        if (tempFileCreated) LittleFS.remove(tempFileName);
     }
 
     Serial.println(">>> File buffer send attempt finished. <<<");
-    // Vymazání LCD krátce po dokonèení
-    timeout1 = SEC_TIMER + 1; // Èasovaè pro vyèištìní LCD ve funkci loop
+    timeout1 = SEC_TIMER + 1;
 }
