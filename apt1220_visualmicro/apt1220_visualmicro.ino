@@ -193,6 +193,8 @@ String newVersion = "";
 
 Preferences preferences;
 
+static bool saveNewConfigData = false; // Flag pro uložení nových dat do konfigurace
+
 byte customChar[] = {
   B00010,
   B00100,
@@ -308,6 +310,20 @@ void initializeNetwork() {
     }
     if (useETH) {
         ETH.begin();
+		Serial.print("ETH.begin() done\n");
+		Serial.print("ETH MAC: ");
+		Serial.println(ETH.macAddress());
+		Serial.print("ETH IP: ");
+		Serial.println(ETH.localIP());
+		Serial.print("ETH GATE: ");
+		Serial.println(ETH.gatewayIP());
+		Serial.print("ETH MASK: ");
+		Serial.println(ETH.subnetMask());
+		Serial.print("ETH DNS: ");
+		Serial.println(ETH.dnsIP());
+		Serial.print("ETH connected: ");
+		Serial.println(ETH.connected());
+
         ethConnected = eth_connected;
     }
 
@@ -681,14 +697,23 @@ void reader_input(const char* display_str, char* data_to_fill) {
             int len = SerialC.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
             buffer2[len] = '\0';  // Null-terminate the string
 
-            if (strcmp(buffer2, "STORNO") == 0) {
+            String buffer2String = buffer2;
+            buffer2String.trim();
+
+            //if (buffer2String.equals("SET-IP")) {
+
+            if (buffer2String.equals("STORNO")) {
+            //if (strcmp(buffer2, "STORNO") == 0) {
                 break;
             }
-            else if (strcmp(buffer2, "OK") == 0) {
+            //else if (strcmp(buffer2, "OK") == 0) {
+            else if (buffer2String.equals("OK")) {
                 strncpy(data_to_fill, new_data, sizeof(new_data));
+				saveNewConfigData = true; // Nastavíme flag pro uložení nových dat
                 break;
             }
-            else if (strcmp(buffer2, "DEFAULT") == 0) {
+            //else if (strcmp(buffer2, "DEFAULT") == 0) {
+            else if (buffer2String.equals("DEFAULT")) {
                 if (strlen(new_data) > 0) {
                     new_data[strlen(new_data) - 1] = '\0';
                     lcd2.setCursor(strlen(new_data) + 4, 2);
@@ -697,8 +722,10 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 }
             }
             else {
-                strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
-                lcd2.printf("%s", buffer2);
+                //strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
+                strcat(new_data, buffer2String.c_str());
+                //lcd2.printf("%s", buffer2);
+                lcd2.printf("%s", buffer2String.c_str());
             }
         }
 
@@ -706,14 +733,21 @@ void reader_input(const char* display_str, char* data_to_fill) {
             int len = SerialD.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
             buffer2[len] = '\0';  // Null-terminate the string
 
-            if (strcmp(buffer2, "STORNO") == 0) {
+            String buffer2String = buffer2;
+            buffer2String.trim();
+
+            //if (strcmp(buffer2, "STORNO") == 0) {
+            if (buffer2String.equals("STORNO")) {
                 break;
             }
-            else if (strcmp(buffer2, "OK") == 0) {
+            //else if (strcmp(buffer2, "OK") == 0) {
+            else if (buffer2String.equals("OK")) {
                 strncpy(data_to_fill, new_data, sizeof(new_data));
+                saveNewConfigData = true; // Nastavíme flag pro uložení nových dat
                 break;
             }
-            else if (strcmp(buffer2, "DEFAULT") == 0) {
+            //else if (strcmp(buffer2, "DEFAULT") == 0) {
+            else if (buffer2String.equals("DEFAULT")) {
                 if (strlen(new_data) > 0) {
                     new_data[strlen(new_data) - 1] = '\0';
                     lcd2.setCursor(strlen(new_data) + 4, 2);
@@ -722,8 +756,10 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 }
             }
             else {
-                strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
-                lcd2.printf("%s", buffer2);
+                //strncat(new_data, buffer2, sizeof(new_data) - strlen(new_data) - 1);
+                strcat(new_data, buffer2String.c_str());
+                //lcd2.printf("%s", buffer2);
+                lcd2.printf("%s", buffer2String.c_str());
             }
         }
 
@@ -816,7 +852,21 @@ void serial(char* buffer2, int port) {
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
     if (buffer2String.equals("SET-IP")) {
-        reader_input("Nastaveni IP", ip_adr);
+        if (useDHCP) {
+            char ip_adr2[16];
+            if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
+            else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
+          reader_input("Nastaveni IP DHCP", ip_adr2);
+		  strcpy(ip_adr, ip_adr2);
+          //snprintf(buffer, sizeof(buffer), "IP: %s\n", ip_adr2);
+          //Serial.print(buffer);
+		  //lcd2.printf("IP: %s\n", ip_adr2);
+        }
+        else {
+          reader_input("Nastaveni IP", ip_adr);
+		}
+        
+		Serial.printf("IP: %s\n", ip_adr);
         //} else if (strcmp(buffer2String, "SET-SERV") == 0) {
     }
     else if (buffer2String.equals("SET-SERV")) {
@@ -1127,6 +1177,11 @@ void serial(char* buffer2, int port) {
             }
         }
     }
+
+    if (saveNewConfigData) {
+        save_config(); // Uložení nových dat do konfigurace
+        saveNewConfigData = false; // Reset flagu po uložení
+	}
 }
 
 void tDEMOscreen() {
