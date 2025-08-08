@@ -31,10 +31,15 @@
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 
+#include <WiFiClientSecure.h>   // Needed for HTTPS
+
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
 
 #define DEBUG_MODE
+
+//#include <ESP32FTPClient.h> // Include the FTP client library
+
 
 // Caution: It need to be a global variable or a global pointer.
 // if FS is a 'setup' variable it will lead to crashes
@@ -54,6 +59,7 @@ WiFiClient client;
 //WebServer server(80);
 AsyncWebServer server(80);
 
+//ESP32FTPClient ftpClient;
 
 // Inicializace sériových portù
 HardwareSerial SerialC(1); // Pro SerialC
@@ -111,6 +117,8 @@ static char __attribute__((section(".noinit"))) op_d[16];
 
 static String activeMAC;
 
+String buffer2StringTmp;
+
 long timer4;
 long timer_reset;
 
@@ -160,6 +168,7 @@ static char password[32] = "AGERITagerit512";
 //static char* ssid = "blackies";
 //static char* password = "Blackies105111";
 const char* serverIP = "192.168.88.221";
+//const char* serverIP = "192.168.225.221";
 const int serverPort = 54321;
 
 const bool vSerialDebug = true;
@@ -178,22 +187,60 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-const String localVersion = "1.0.0.2";
+const String localVersion = "1.0.1.4";
+
+//String currentVersion = "1.0.1.2";
+String newVersion = "";
+
 // URL k souboru, kde je uvedena aktuální verze firmware na serveru
-const char* versionURL = "http://192.168.222.114:82/ota_update/version.txt";
+//const char* versionURL = "http://192.168.222.114:82/ota_update/version.txt";
+const char* versionURL = "https://petrsramek.eu/emistr/apt1220/version.txt";
 // URL k novému firmware (binární soubor)
-const char* firmwareURL = "http://192.168.222.114:82/ota_update/firmware.bin";
+//const char* firmwareURL = "http://192.168.222.114:82/ota_update/firmware.bin";
+const char* firmwareURL = "https://petrsramek.eu/emistr/apt1220/firmware.bin";
+
+// Define your server's Root CA certificate (same as before)
+const char* rootCACertificate_OTA = \
+"---- - BEGIN CERTIFICATE---- -\n" \
+"MIIEGzCCAwOgAwIBAgIQCvUoYPNvi0rvR6nXFMo29zANBgkqhkiG9w0BAQsFADBI\n" \
+"MRswGQYDVQQDDBJFU0VUIFNTTCBGaWx0ZXIgQ0ExHDAaBgNVBAoME0VTRVQsIHNw\n" \
+"b2wuIHMgci4gby4xCzAJBgNVBAYTAlNLMB4XDTI1MDUxOTAxMDQ0N1oXDTI1MDgx\n" \
+"NzAxMDQ0NlowGDEWMBQGA1UEAxMNcGV0cnNyYW1lay5ldTCCASIwDQYJKoZIhvcN\n" \
+"AQEBBQADggEPADCCAQoCggEBANioEA3ZQhl17xZj7RUfFKKYctlCsHUFLSeDjKYw\n" \
+"LYIgPaXIQW7uq6bkoZbiXU + 0MFNYENs2we1lSZbvTuSLV1n5edc4ZYUiHmoY1d9i\n" \
+"qMy5WqbcOEDqzIbG9DPr580gqOI1PzqfZ6UYb5FTZyziA3mI86s4ZDPsVPK9PAdV\n" \
+"hzdooV5vYqxmV6JpQLSkOIkmLvd + hBya + g9vTlRYW1rX / CnHxkznv6CM2 + Uh / A9R\n" \
+"8vNAdL07zcYiu9Fyl6Qg3wTbMxFY9xmFrX3CcQCRsRJi1ONNUKRDWlRdytqoRsoC\n" \
+"WPZbocYwVJlGkfbtdLUN + 7vQHvTmnfVeu7uNeN8b93zS9msCAwEAAaOCAS8wggEr\n" \
+"MAsGA1UdDwQEAwIFoDAdBgNVHQ4EFgQUtzIVdxcqkyQXEAq1eXFpz + w9Ix4wHwYD\n" \
+"VR0jBBgwFoAUqM1h + TUmOXLCXdRGzRli / gxXjaUwHQYDVR0lBBYwFAYIKwYBBQUH\n" \
+"AwEGCCsGAQUFBwMCMAwGA1UdEwEB / wQCMAAwga4GA1UdEQSBpjCBo4ITYWRhbTMu\n" \
+"cGV0cnNyYW1lay5ldYIXYWRhbWZpbmFsLnBldHJzcmFtZWsuZXWCC2RlbHBoaTR1\n" \
+"LmV1gg9rb2xvcHJvYWRhbWEuY3qCDXBldHJzcmFtZWsuZXWCD3d3dy5kZWxwaGk0\n" \
+"dS5ldYITd3d3LmtvbG9wcm9hZGFtYS5jeoIRd3d3LnBldHJzcmFtZWsuZXWCDXd3\n" \
+"dy5zdWRhdGEuZXUwDQYJKoZIhvcNAQELBQADggEBAFr8bG2SZCg2GZL8jyCA / iu /\n" \
+"77A8NBrSXVmKSM7bgzqQDQ / QxIYR1T7a / dyhG6ZX4XY8Owj30GXPuQQwbR + gTWoD\n" \
+"QasEBwuNywEXVt9XFKkP4O / uwewCNRadLFAqu5GT0rTgMtECbtuJ1MiusumatLUu\n" \
+"V / AFTVzxm6abtXAq8xUrR1248kOtXW9hgl174ENIg + xRr261bn8PBrorhxuK + btD\n" \
+"kxoM0ROe5T0zjNawX3KzIMiuq / qf758abSTfRa2rKtzi63pVvHRbnDjXCziOzadP\n" \
+"z1bfP984ztj80YymWtufoXRIpB7f / BjujEjzmmsdFlxg6Cp5FCmeKv5VUTxqY8Q =\n" \
+"---- - END CERTIFICATE---- -\n";
+
+
+const char* firmwareFTP = "update.emistr.cz";
+const char* firmwareFTPPath = "/apt1220";
+const char* firmwareFTPUser = "emistrUpdate";
+const char* firmwareFTPPassword = "'X9SeQ$+#29d*b7#N'";
 
 // Globální promìnné pro OTA aktualizaci
 TaskHandle_t otaTaskHandle = NULL;
 bool otaInProgress = false;
 bool otaUpdateAvailable = false;
-String currentVersion = "1.0.0.2";
-String newVersion = "";
 
 Preferences preferences;
 
 static bool saveNewConfigData = false; // Flag pro uložení nových dat do konfigurace
+static bool restartNetwork    = false; // Flag pro restartování sítì
 
 byte customChar[] = {
   B00010,
@@ -309,7 +356,22 @@ void initializeNetwork() {
         wifiConnected = (WiFi.status() == WL_CONNECTED);
     }
     if (useETH) {
+        if (restartNetwork) { ETH.end(); }
         ETH.begin();
+
+        if (!useDHCP) {
+            ETH.localIP() = IPAddress(ip_adr);
+			ETH.subnetMask() = IPAddress(ip_mask);
+			ETH.gatewayIP() = IPAddress(ip_gate);
+            if (!ETH.config(IPAddress(ip_adr), IPAddress(ip_gate), IPAddress(ip_mask), IPAddress(ip_gate), IPAddress(ip_server))) {
+              Serial.println("ETH.config() failed, trying to use begin() with static IP...");
+            }
+            else
+            {
+                ETH.begin();
+            }
+        }
+         
 		Serial.print("ETH.begin() done\n");
 		Serial.print("ETH MAC: ");
 		Serial.println(ETH.macAddress());
@@ -348,7 +410,9 @@ void initializeDisplay() {
     delay(200);
     lcd2.printf("       eMISTR       ");
     lcd2.setCursor(0, 2);
-    lcd2.printf("  Verze: %s", VERZE_PRACANT);
+    lcd2.printf("Verze: %s", VERZE_PRACANT);
+    lcd2.setCursor(0, 3);
+    lcd2.printf("Verze FW: %s", localVersion);
     delay(200);
     //rtc2.setHourMode(CLOCK_H24);
     //rtc2.startClock();
@@ -487,6 +551,8 @@ boolean load_config() {
     sprintf(ip_adr, preferences.getString("ip_adr", "192.168.222.202").c_str());
     sprintf(ip_mask, preferences.getString("ip_mask", "255.255.255.0").c_str());
     sprintf(ip_server, preferences.getString("ip_server", "192.168.88.221").c_str());
+	serverIP = ip_server;
+    sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
     sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
     timer1 = preferences.getInt("timer1", 5);
     timer2 = preferences.getInt("timer2", 3);
@@ -500,6 +566,8 @@ boolean load_config() {
 
     useWifi = preferences.getBool("useWifi", false);
     useETH = preferences.getBool("useETH", true);
+
+	useDHCP = preferences.getBool("useDHCP", true);
 
     sprintf(ssid, preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
     sprintf(password, preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
@@ -542,6 +610,7 @@ boolean save_config() {
 
     preferences.putBool("useWifi", useWifi);
     preferences.putBool("useETH", useETH);
+	preferences.putBool("useDHCP", useDHCP);
 
     preferences.putString("SSID_NAME", ssid);
     preferences.putString("SSID_PASS", password);
@@ -570,6 +639,7 @@ void set_default() {
     loaded_default = 1;
     ///vypnutí použití EEPROM a EspConfigLib
     //eeprom.eeprom_write(240, &loaded_default);
+    saveNewConfigData = true;
 }
 
 void init_lcd() {
@@ -614,7 +684,19 @@ void menuconfig() {
     fast_clear_disp();
     lcd2.setCursor(0, 0);
     lcd2.printf("IP:");
-    lcd2.printf(ip_adr);
+    //lcd2.printf(ip_adr);
+
+    if (useDHCP) {
+        char ip_adr2[16];
+        if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
+        else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
+        lcd2.printf(ip_adr2);
+		//delete ip_adr2; // Uvolnìní pamìti, pokud bylo použito dynamické alokování
+    }
+    else {
+        lcd2.printf(ip_adr);
+    }
+
     lcd2.setCursor(0, 1);
     lcd2.printf("MASK:");
     lcd2.printf(ip_mask);
@@ -623,7 +705,20 @@ void menuconfig() {
     lcd2.printf(ip_server);
     lcd2.setCursor(0, 3);
     lcd2.printf("VERZE: ");
-    lcd2.printf(" %s  ", VERZE_PRACANT);
+    //lcd2.printf(" %s  ", VERZE_PRACANT);
+    lcd2.printf(" %s  ", localVersion);
+}
+
+void menuconfigwifi() {
+    long timeout_up;
+    fast_clear_disp();
+    lcd2.setCursor(0, 0);
+    lcd2.printf("SSID:");
+    lcd2.printf(ssid);
+    lcd2.setCursor(0, 3);
+    lcd2.printf("VERZE: ");
+    //lcd2.printf(" %s  ", VERZE_PRACANT);
+    lcd2.printf(" %s  ", localVersion);
 }
 
 void resetConfig() {
@@ -858,12 +953,14 @@ void serial(char* buffer2, int port) {
             else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
           reader_input("Nastaveni IP DHCP", ip_adr2);
 		  strcpy(ip_adr, ip_adr2);
+		  restartNetwork = true; // Nastavíme flag pro restart sítì
           //snprintf(buffer, sizeof(buffer), "IP: %s\n", ip_adr2);
           //Serial.print(buffer);
 		  //lcd2.printf("IP: %s\n", ip_adr2);
         }
         else {
           reader_input("Nastaveni IP", ip_adr);
+          restartNetwork = true; // Nastavíme flag pro restart sítì
 		}
         
 		Serial.printf("IP: %s\n", ip_adr);
@@ -883,10 +980,12 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-GATE")) {
         reader_input("Nastaveni BRANY", ip_gate);
+        restartNetwork = true; // Nastavíme flag pro restart sítì
         //} else if (strcmp(buffer2, "SET-MASK") == 0) {
     }
     else if (buffer2String.equals("SET-MASK")) {
         reader_input("Nastaveni Masky", ip_mask);
+        restartNetwork = true; // Nastavíme flag pro restart sítì
         //} else if (strcmp(buffer2, "FILL") == 0) {
     }
     else if (buffer2String.equals("FILL")) {
@@ -979,14 +1078,24 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-DHCP")) {
         useDHCP = true;
+        saveNewConfigData = true;
+        restartNetwork = true; // Nastavíme flag pro restart sítì
     }
+    else if (buffer2String.equals("SET-STATIC")) {
+        useDHCP = false;
+        saveNewConfigData = true;
+        restartNetwork = true; // Nastavíme flag pro restart sítì
+        }
     else if (buffer2String.equals("SET-WIFI")) {
         useWifi = true;
         useETH = false;
+        saveNewConfigData = true;
     }
     else if (buffer2String.equals("SET-ETH")) {
         useWifi = false;
         useETH = true;
+        saveNewConfigData = true;
+        restartNetwork = true; // Nastavíme flag pro restart sítì
     }
     else if (buffer2String.equals("SET-SSID")) {
         //SSID
@@ -997,15 +1106,18 @@ void serial(char* buffer2, int port) {
         reader_input("Nastavení hesla", password);
     }
     else if (buffer2String.equals("SHOW-NET")) {
-        //SSID PASSWORD 
-        reader_input("Nastavení hesla", password);
+        menuconfig();
+        timeout1 = SEC_TIMER + timer2;
     }
     else if (buffer2String.equals("SHOW-WIFI")) {
-        //SSID PASSWORD 
-        reader_input("Nastavení hesla", password);
+		menuconfigwifi();
+        timeout1 = SEC_TIMER + timer2;
     }
     else if (buffer2String.equals("RESET-BUFFER")) {
         reset_buffer_file();
+        blank_line(0);
+        lcd2.printf("MAZU OFFLINE BUFFER");
+        timeout1 = SEC_TIMER + timer2;
     }
     else {
         timeout1 = SEC_TIMER + timer1;
@@ -1182,6 +1294,16 @@ void serial(char* buffer2, int port) {
         save_config(); // Uložení nových dat do konfigurace
         saveNewConfigData = false; // Reset flagu po uložení
 	}
+
+    if (restartNetwork) {
+		//ESP.restart(); // Restart ESP32 pro aplikaci zmìn sítì
+		blank_line(3); // Vymažeme øádek 3
+		lcd2.printf("RESTART SITE...");
+
+		initializeNetwork(); // Volání funkce pro inicializaci sítì
+		restartNetwork = false; // Reset flagu po restartu sítì
+    }
+
 }
 
 void tDEMOscreen() {
@@ -1212,11 +1334,12 @@ void tDEMOscreen() {
     lcd2.setCursor(0, 2);
     //print_time(SEC_TIMER, buffer2);
 
-    //DateTime now = rtc2.now();
+	//DateTime now = rtc2.isConnected() ? rtc2.getDateTime() : DateTime(SEC_TIMER); // Použijeme RTC pokud je pøipojeno, jinak použijeme aktuální èas z millis()  
     //String nowStr = now.timestamp(DateTime::TIMESTAMP_FULL);
 
     //lcd2.print(nowStr);
 
+	//lcd2.print(rtc2.getDateTimeString()); // Zobrazíme aktuální èas z RTC
     print_time(rtc2.getEpoch(), buffer2);
 
     //logToSerial(rtc2.getDateTimeString() , 1);
@@ -1266,7 +1389,7 @@ void tDEMOscreen() {
 
             // Formátování výpisu, napø. "OFF-LINE Buf:  15% "
             char statusStr[21];
-            snprintf(statusStr, sizeof(statusStr), "OFF-LINE Buf:%3d%%  ", usage_percent);
+            snprintf(statusStr, sizeof(statusStr), "OFF-LINE  Volno:%3d%%", 100-usage_percent);
             // Doplnìní mezerami do konce øádku
             for (int i = strlen(statusStr); i < 20; ++i) statusStr[i] = ' ';
             statusStr[20] = '\0';
@@ -1435,10 +1558,13 @@ void tDEMOrun() {
     //print_time(SEC_TIMER, buffer2);
     //print_time(rtc.getEpoch(), buffer2);
 
-    print_time(rtc2.getEpoch(), buffer2);
+    //print_time(rtc2.getEpoch(), buffer2);
+	get_time(buffer2);
+
+    // 
     //print_time(rtc2.now().unixtime(), buffer2);
 
-    lcd2.printf(buffer2);
+    lcd2.print(buffer2);
     lcd2.setCursor(0, 3);
     lcd2.printf(net_on ? "      ON-LINE       " : "OFF-LINE");
 
@@ -1600,7 +1726,7 @@ void get_time(char* buff) {
 
 void print_time(unsigned long thetime, char* buff)
 {
-    struct tm	thetm;
+    struct tm thetm;
 
     gmtime_r((time_t*)&thetime, &thetm);
     /*
@@ -1608,10 +1734,21 @@ void print_time(unsigned long thetime, char* buff)
                 thetm.tm_mday , thetm.tm_mon, 1900+thetm.tm_year,
                 thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
     */
+    /*
     sprintf(buff, "%02d.%02d.%04d  %02d:%02d:%02d",
         //thetm.tm_mday, thetm.tm_mon + 1, 1900 + thetm.tm_year,
         thetm.tm_mday, thetm.tm_mon + 1, RTC_YEAR_OFFSET + thetm.tm_year,
         thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
+    */
+
+    sprintf(buff, "%02d.%02d.%04d  %02d:%02d:%02d",
+        rtc2.getDay(),           // Den (1-31)        
+        rtc2.getMonth(),         // Mìsíc (1-12)
+        rtc2.getYear(),          // Rok (plný, napø. 2024)
+        rtc2.getHours(),          // Hodiny (0-23)
+        rtc2.getMinutes(),        // Minuty (0-59)
+        rtc2.getSeconds()         // Sekundy (0-59)
+    );
 
 };
 
@@ -1731,6 +1868,7 @@ void TCP() {
             };
 
             logToSerial(buffer, 0);
+			int asciiVal = (int)buffer[0]; // Získání ASCII hodnoty prvního znaku
 
             String buffer2String = buffer + 2;
             buffer2String.trim();
@@ -1799,12 +1937,17 @@ void TCP() {
             case 4:
                 blank_line(3);
                 //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer2String.c_str());
                 break;
             case 5:
                 blank_line(1);
+				
+                //buffer2StringTmp = buffer + 2;
+				//buffer2StringTmp.trim();
+				//lcd2.print(buffer2StringTmp);
+                //lcd2.printf("%s", @buffer2StringTmp);
                 //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer2String.c_str());
                 break;
             case 6:
                 blank_line(0);
@@ -1813,12 +1956,32 @@ void TCP() {
                 //lcd2.printf("%s", "prdel1");
 
                 //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer2String.c_str());
                 break;
             case 7:
                 blank_line(2);
                 //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String);
+                lcd2.printf("%s", buffer2String.c_str());
+                break;
+            case 8:
+                blank_line(0);
+                lcd2.printf("%s", buffer2String.c_str());
+                break;
+            case 0x10:
+                blank_line(0);
+                lcd2.printf("%s", buffer2String.c_str());
+                break;
+            case 0x11:
+                blank_line(2);
+                lcd2.printf("%s", buffer2String.c_str());
+                break;
+            case 18:
+                blank_line(0);
+                lcd2.printf("%s", buffer2String.c_str());
+                break;
+            case 19:
+                blank_line(1);
+                lcd2.printf("%s", buffer2String.c_str());
                 break;
             case 0xB:  // Nastavení timeoutu
                 timer1 = atoi(buffer + 2);
@@ -1842,8 +2005,24 @@ void TCP() {
                 saved = 1;
                 timeout1 = SEC_TIMER + timer2;
                 break;
+            case 0xF:
+                strcpy(buffer, "\xF~");
+                strcat(buffer, itoa(timer1, buffer2, buffer2String.length()));
+                strcat(buffer, "\n");
+                //sock_write(&socket, buffer, strlen(buffer));
+                //sock_flushnext(&socket);
+				client.print(buffer);
+                break;
 
             case 0x16:  // Vymazání displeje
+                saved = 1;
+                timeout1 = SEC_TIMER + timer2;
+                break;
+            case 0x18:
+                // odjistit zamek
+                //WrPortI(PEDR, &PEDRShadow, (1 << 7));
+                blank_line(0);
+                lcd2.printf("Zamek odjisten");
                 saved = 1;
                 timeout1 = SEC_TIMER + timer2;
                 break;
@@ -2273,6 +2452,8 @@ void checkForUpdates() {
     http.end();
 }
 
+
+
 // Funkce, která bìží jako samostatné vlákno
 void otaUpdateTask(void* parameter) {
     Serial.println("OTA task started");
@@ -2283,13 +2464,35 @@ void otaUpdateTask(void* parameter) {
             checkForUpdatesBackground();
         }
 
-        // Pokud je aktualizace dostupná, proveï ji
+        // Pokud je aktualizace dostupná, proveï ji podle schématu URL
         if (otaUpdateAvailable && !otaInProgress) {
-            performUpdate();
+            Serial.print("Firmware URL pro aktualizaci: ");
+            Serial.println(firmwareURL);
+
+            if (firmwareURL != NULL && strlen(firmwareURL) > 7) { // Základní kontrola platnosti URL
+                if (strncmp(firmwareURL, "https://", 8) == 0) {
+                    Serial.println("Detekováno HTTPS, volám performUpdateHTTPS().");
+                    performUpdateHTTPS();
+                }
+                else if (strncmp(firmwareURL, "http://", 7) == 0) {
+                    Serial.println("Detekováno HTTP, volám performUpdate().");
+                    performUpdate(); // Vaše existující funkce pro HTTP
+                }
+                else {
+                    Serial.println("CHYBA: firmwareURL má neznámé schéma nebo je neplatná!");
+                    otaUpdateAvailable = false; // Resetuj pøíznak, aby se to neopakovalo hned
+                    // otaInProgress zùstává false
+                }
+            }
+            else {
+                Serial.println("CHYBA: firmwareURL je NULL nebo pøíliš krátká!");
+                otaUpdateAvailable = false; // Resetuj pøíznak
+            }
         }
 
-        // Poèkej na další kontrolu (napø. 1 hodina)
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // 1 hodina
+        // Poèkej na další kontrolu.
+        // POZNÁMKA: 60000 ms je 1 MINUTA, ne 1 hodina. Pro 1 hodinu použijte 3600000 ms.
+        vTaskDelay(60000 / portTICK_PERIOD_MS); // Aktuálnì 1 minuta
     }
 }
 
@@ -2314,9 +2517,11 @@ void checkForUpdatesBackground() {
         Serial.print("Verze na serveru: ");
         Serial.println(serverVersion);
         Serial.print("Aktuální verze: ");
-        Serial.println(currentVersion);
+        //Serial.println(currentVersion);
+        Serial.println(localVersion);
 
-        String localVersionTmp = currentVersion;
+        //String localVersionTmp = currentVersion;
+        String localVersionTmp = localVersion;
         localVersionTmp.replace(".", "");
         String serverVersionTmp = serverVersion;
         serverVersionTmp.replace(".", "");
@@ -2372,6 +2577,47 @@ void performUpdate() {
     case HTTP_UPDATE_OK:
         Serial.println("Aktualizace probìhla úspìšnì, restartuju...");
         // Pøi úspìšné aktualizaci dojde k restartu ESP32
+        break;
+    }
+}
+
+// Performs the actual update (using HTTPS, following official example style)
+void performUpdateHTTPS() {
+    Serial.println("Zahajuji aktualizaci na pozadí (HTTPS)...");
+    otaInProgress = true;
+    otaUpdateAvailable = false; // Consume the flag
+
+    Serial.print("Stahování z (HTTPS): ");
+    Serial.println(firmwareURL);
+
+    WiFiClientSecure secureClientForUpdate;
+
+    // Configure the WiFiClientSecure object directly:
+    // 1. Set the Root CA Certificate
+    secureClientForUpdate.setInsecure();
+    //secureClientForUpdate.setCACert(rootCACertificate_OTA);
+    // 2. Set a timeout for the connection (e.g., 30 seconds for firmware download)
+    // The official example uses 12 seconds (12000), adjust as needed for your server/file size.
+    secureClientForUpdate.setTimeout(30000); // 30 seconds
+
+    t_httpUpdate_return ret = httpUpdate.update(secureClientForUpdate, firmwareURL);
+
+    switch (ret) {
+    case HTTP_UPDATE_FAILED:
+        Serial.printf("Aktualizace selhala: %d - %s\n",
+            httpUpdate.getLastError(),
+            httpUpdate.getLastErrorString().c_str());
+        otaInProgress = false;
+        break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("Není k dispozici žádná nová aktualizace (dle httpUpdate).");
+        otaInProgress = false;
+        break;
+
+    case HTTP_UPDATE_OK:
+        Serial.println("Aktualizace probìhla úspìšnì, restartuju...");
+        // ESP32 will restart automatically.
         break;
     }
 }
