@@ -357,55 +357,82 @@ void initializeFileSystem() {
 }
 
 void initializeNetwork() {
-    Serial.print("Registering event handler for ETH events...");
+    Serial.println("--- Initializing Network ---");
     WiFi.onEvent(WiFiEvent);
     bool wifiConnected = false;
-    bool ethConnected = false;
+    bool ethInitOk = false;
 
     if (useWifi) {
         connectToWiFi();
         wifiConnected = (WiFi.status() == WL_CONNECTED);
     }
+
     if (useETH) {
-        if (restartNetwork) { ETH.end(); }
-        ETH.begin();
-
-        if (!useDHCP) {
-            ETH.localIP() = IPAddress(ip_adr);
-			ETH.subnetMask() = IPAddress(ip_mask);
-			ETH.gatewayIP() = IPAddress(ip_gate);
-            if (!ETH.config(IPAddress(ip_adr), IPAddress(ip_gate), IPAddress(ip_mask), IPAddress(ip_gate), IPAddress(ip_server))) {
-              Serial.println("ETH.config() failed, trying to use begin() with static IP...");
-            }
-            else
-            {
-                ETH.begin();
-            }
+        if (restartNetwork) {
+            ETH.end();
+            delay(500);
         }
-         
-		Serial.print("ETH.begin() done\n");
-		Serial.print("ETH MAC: ");
-		Serial.println(ETH.macAddress());
-		Serial.print("ETH IP: ");
-		Serial.println(ETH.localIP());
-		Serial.print("ETH GATE: ");
-		Serial.println(ETH.gatewayIP());
-		Serial.print("ETH MASK: ");
-		Serial.println(ETH.subnetMask());
-		Serial.print("ETH DNS: ");
-		Serial.println(ETH.dnsIP());
-		Serial.print("ETH connected: ");
-		Serial.println(ETH.connected());
 
-        ethConnected = eth_connected;
+        if (ETH.begin()) {
+            ethInitOk = true;
+
+            if (!useDHCP) {
+                Serial.println("Configuring static IP for ETH...");
+                IPAddress local_IP, gateway, subnet, primaryDNS;
+
+                local_IP.fromString(ip_adr);
+                gateway.fromString(ip_gate);
+                subnet.fromString(ip_mask);
+                primaryDNS.fromString(ip_server);
+
+                if (!ETH.config(local_IP, gateway, subnet, primaryDNS)) {
+                    Serial.println("ETH: Failed to configure static IP!");
+                }
+            }
+
+            // Logování stavu po inicializaci
+            // Poèkáme chvilku, aby se stihly eventy zpracovat a DHCP priradit IP
+            delay(1000);
+
+            Serial.println("ETH Interface Status:");
+            Serial.print("  MAC: ");
+            Serial.println(ETH.macAddress());
+            Serial.print("  IP Address: ");
+            Serial.println(ETH.localIP());
+            Serial.print("  Subnet Mask: ");
+            Serial.println(ETH.subnetMask());
+            Serial.print("  Gateway: ");
+            Serial.println(ETH.gatewayIP());
+            Serial.print("  DNS Server: ");
+            Serial.println(ETH.dnsIP());
+            Serial.print("  Link Status: ");
+            Serial.println(ETH.linkUp() ? "UP" : "DOWN");
+            Serial.print("  Link Speed: ");
+            Serial.println(String(ETH.linkSpeed()) + " Mbps");
+
+        }
+        else {
+            Serial.println("FATAL: ETH.begin() failed!");
+        }
     }
 
-    if (!wifiConnected && !ethConnected) {
+    // eth_connected se nastavuje globálnì v eventu ARDUINO_EVENT_ETH_GOT_IP
+    // Dáme mu chvilku, aby se to stihlo stát
+    unsigned long startAttempt = millis();
+    while (!eth_connected && useETH && (millis() - startAttempt < 5000)) {
+        delay(100); // Poèkáme až 5 sekund na event, že jsme dostali IP
+    }
+
+    // AP Mode spustíme jen pokud selhala WiFi i Ethernet
+    if (!wifiConnected && !eth_connected) {
+        Serial.println("No network connection, starting AP Mode.");
         startAPMode();
     }
     else {
+        Serial.println("Network connection established, connecting to server...");
         connectToServer();
     }
+    Serial.println("--- Network Initialization Finished ---");
 }
 
 void initializeTasks() {
@@ -488,6 +515,11 @@ void setup() {
     if (i2cMutex == NULL) {
         Serial.println("Chyba pri vytvareni I2C mutexu!");
         // Tady bychom mohli tøeba zastavit program, protože bez toho to nebude fungovat
+    }
+
+    tcpMutex = xSemaphoreCreateMutex(); // <-- PØIDEJ TENTO ØÁDEK
+    if (tcpMutex == NULL) {
+        Serial.println("Chyba pri vytvareni TCP mutexu!");
     }
 
     /*
@@ -675,6 +707,53 @@ void blank_line(int line) {
     }
 }
 
+/**
+ * @brief Bezpeènì zapíše data do TCP klienta. Stará se o zamèení a odemèení.
+ * @param data Ukazatel na data k odeslání.
+ * @return true pokud se odeslání podaøilo, jinak false.
+ */
+bool tcp_print_safe(const char* data) {
+    bool success = false;
+    // Poèkáme si na klíè (mutex)
+    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (client.connected()) {
+            client.print(data);
+            success = true;
+        }
+        // Vrátíme klíè
+        xSemaphoreGive(tcpMutex);
+    }
+    else {
+        Serial.println("CHYBA: tcp_print_safe nemohl ziskat TCP mutex!");
+    }
+    return success;
+}
+
+/**
+ * @brief Bezpeènì se pøipojí k TCP serveru.
+ */
+void connectToServer_safe() {
+    // Vezmeme si klíè
+    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        Serial.println("Pokousim se pripojit k serveru...");
+        if (client.connect(serverIP, serverPort)) {
+            setNetOn(1, 12);
+            SEC_TIMER = millis() / 1000;
+            last_ping = SEC_TIMER;
+            Serial.println("Pripojeno k serveru.");
+        }
+        else {
+            setNetOn(0, 13);
+            Serial.println("Pripojeni k serveru selhalo.");
+        }
+        // Vrátíme klíè
+        xSemaphoreGive(tcpMutex);
+    }
+    else {
+        Serial.println("CHYBA: connectToServer_safe nemohl ziskat TCP mutex!");
+    }
+}
+
 boolean load_config() {
     //naètení konfigurace z Preferences
     preferences.begin("my-app", true);
@@ -684,14 +763,13 @@ boolean load_config() {
 
 	snprintf(ip_adr, sizeof(ip_adr), "%s", preferences.getString("ip_adr", "192.168.222.202").c_str());
 	snprintf(ip_mask, sizeof(ip_mask), "%s", preferences.getString("ip_mask", "255.255.255.0").c_str());
-	snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.88.221").c_str());
+	//snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.88.221").c_str());
+    snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.225.221").c_str());
+    snprintf(ip_gate, sizeof(ip_gate), "%s", preferences.getString("ip_gate", "192.168.222.222").c_str());
 
 	serverIP = ip_server;
     //sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
     //sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
-
-	snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.225.221").c_str());
-	snprintf(ip_gate, sizeof(ip_gate), "%s", preferences.getString("ip_gate", "192.168.222.222").c_str());
 
     timer1 = preferences.getInt("timer1", 5);
     timer2 = preferences.getInt("timer2", 3);
@@ -1094,6 +1172,9 @@ void serial(char* buffer2, int port) {
     char tmp[100] = { 0 };
     int counter1;
     char tmp2[100] = { 0 };
+
+    char first_char_code[2] = { 0 }; // Pomocný buffer pro první znak
+
     /*
         char buffer2_copy[100];
         strncpy(buffer2_copy, buffer2, sizeof(buffer2_copy) - 1);
@@ -1307,10 +1388,12 @@ void serial(char* buffer2, int port) {
         // Zpracování na základì prvního znaku
         switch (buffer2[0]) {
         case 'A':
-            strcpy(tmp, "\x06");
+            //strcpy(tmp, "\x06");
+			first_char_code[0] = '\x06'; // Uložení prvního znaku
             break;
         case 'B':
-            strcpy(tmp, "\x05");
+            //strcpy(tmp, "\x05");
+			first_char_code[0] = '\x05'; // Uložení prvního znaku
             break;
         case 'D':
             if (key_maker == 1) {
@@ -1327,40 +1410,51 @@ void serial(char* buffer2, int port) {
                 }
             }
             else {
-                strcpy(tmp, "\x04");
+                //strcpy(tmp, "\x04");
+				first_char_code[0] = '\x04'; // Uložení prvního znaku
             }
             break;
         case 'E':
-            strcpy(tmp, "\x08");
+            //strcpy(tmp, "\x08");
+			first_char_code[0] = '\x08'; // Uložení prvního znaku
             break;
         case 'F':
-            strcpy(tmp, "\x07");
+            //strcpy(tmp, "\x07");
+			first_char_code[0] = '\x07'; // Uložení prvního znaku
             break;
         case 'G':
-            strcpy(tmp, "\x10");
+            //strcpy(tmp, "\x10");
+			first_char_code[0] = '\x10'; // Uložení prvního znaku
             break;
         case 'H':
-            strcpy(tmp, "\x11");
+            //strcpy(tmp, "\x11");
+			first_char_code[0] = '\x11'; // Uložení prvního znaku
             break;
         case 'I':
-            strcpy(tmp, "\x12");
+            //strcpy(tmp, "\x12");
+			first_char_code[0] = '\x12'; // Uložení prvního znaku
             break;
         case 'J':
-            strcpy(tmp, "\x13");
+            //strcpy(tmp, "\x13");
+			first_char_code[0] = '\x13'; // Uložení prvního znaku
             break;
         case 'K':
-            strcpy(tmp, "\x19");
+            //strcpy(tmp, "\x19");
+			first_char_code[0] = '\x19'; // Uložení prvního znaku
             break;
         case 'L':
-            strcpy(tmp, "\x20");
+            //strcpy(tmp, "\x20");
+			first_char_code[0] = '\x20'; // Uložení prvního znaku
             break;
         default:
-            strcpy(tmp, "\x17");
+            //strcpy(tmp, "\x17");
+			first_char_code[0] = '\x17'; // Uložení prvního znaku
             break;
         }
 
         //strcat(tmp, buffer2);
-        strcat(tmp, buffer2String.c_str());
+
+        //strcat(tmp, buffer2String.c_str());
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
@@ -1373,14 +1467,25 @@ void serial(char* buffer2, int port) {
         }
 
         // Pøidání èasu k pøíkazùm typu D, E, J atd.
+        /*
         if (strchr("DEJ0123456789", buffer2[0])) {
             strcat(tmp, "~");
             //get_time(SEC_TIMER, buffer);
             get_time(buffer);
             strcat(tmp, buffer);
         }
+        */
+		// Pøidání èasu k pøíkazùm typu D, E, J atd.
+        if (strchr("DEJ0123456789", buffer2[0])) {
+            get_time(buffer, sizeof(buffer)); // buffer je pomocné pole, kam se uloží èas
+            snprintf(tmp, sizeof(tmp), "%s%s~%s\n", first_char_code, buffer2String.c_str(), buffer);
+        }
+        else {
+            snprintf(tmp, sizeof(tmp), "%s%s\n", first_char_code, buffer2String.c_str());
+        }
 
-        strcat(tmp, "\n");
+        //strcat(tmp, "\n");
+        
         if (net_on) {
             client.print(tmp);
         }
@@ -1532,7 +1637,7 @@ void tDEMOscreen() {
     //lcd2.print(nowStr);
 
 	//lcd2.print(rtc2.getDateTimeString()); // Zobrazíme aktuální èas z RTC
-    print_time(rtc2.getEpoch(), buffer2);
+    print_time(rtc2.getEpoch(), buffer2, sizeof(buffer2));
 
     //logToSerial(rtc2.getDateTimeString() , 1);
     //logToSerial(nowStr.c_str(), 1);
@@ -1769,7 +1874,7 @@ void tDEMOrun() {
     //print_time(rtc.getEpoch(), buffer2);
 
     //print_time(rtc2.getEpoch(), buffer2);
-	get_time(buffer2);
+	get_time(buffer2, sizeof(buffer2));
 
     // 
     //print_time(rtc2.now().unixtime(), buffer2);
@@ -1899,7 +2004,7 @@ void WiFiEvent(WiFiEvent_t event)
     }
 }
 
-void get_time(unsigned long thetime, char* buff) {
+void get_time(unsigned long thetime, char* buff, size_t buff_size) {
     struct tm thetm;
 
     // Používáme gmtime_r pro bezpeèné konvertování epochálního èasu na strukturovaný èas
@@ -1918,7 +2023,7 @@ void get_time(unsigned long thetime, char* buff) {
     );
     */
 
-    snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
+    snprintf(buff, buff_size, "%04d-%02d-%02d %02d:%02d:%02d",
         RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
         thetm.tm_mon + 1,        // Mìsíce jsou indexovány od 0
         thetm.tm_mday,           // Den v mìsíci
@@ -1928,14 +2033,14 @@ void get_time(unsigned long thetime, char* buff) {
 	);
 }
 
-void get_time(char* buff) {
+void get_time(char* buff, size_t buff_size) {
     //DateTime now;
 
     // Získání aktuálního èasu
     //now = rtc2.getDateTime();
 
     // Vytvoøení formátovaného øetìzce s datem a èasem
-    snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
+    snprintf(buff, buff_size, "%04d-%02d-%02d %02d:%02d:%02d",
         rtc2.getYear(),          // Rok (plný, napø. 2024)
         rtc2.getMonth(),         // Mìsíc (1-12)
         rtc2.getDay(),           // Den (1-31)
@@ -1955,7 +2060,7 @@ void get_time(char* buff) {
     */
 }
 
-void print_time(unsigned long thetime, char* buff)
+void print_time(unsigned long thetime, char* buff, size_t buff_size)
 {
     struct tm thetm;
 
@@ -1972,7 +2077,7 @@ void print_time(unsigned long thetime, char* buff)
         thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
     */
 
-    snprintf(buff, sizeof(buff), "%02d.%02d.%04d  %02d:%02d:%02d",
+    snprintf(buff, buff_size, "%02d.%02d.%04d  %02d:%02d:%02d",
         rtc2.getDay(),           // Den (1-31)        
         rtc2.getMonth(),         // Mìsíc (1-12)
         rtc2.getYear(),          // Rok (plný, napø. 2024)
@@ -1980,6 +2085,7 @@ void print_time(unsigned long thetime, char* buff)
         rtc2.getMinutes(),        // Minuty (0-59)
         rtc2.getSeconds()         // Sekundy (0-59)
 	);
+    
 /*
     sprintf(buff, "%02d.%02d.%04d  %02d:%02d:%02d",
         rtc2.getDay(),           // Den (1-31)        
@@ -1989,7 +2095,7 @@ void print_time(unsigned long thetime, char* buff)
         rtc2.getMinutes(),        // Minuty (0-59)
         rtc2.getSeconds()         // Sekundy (0-59)
     );
-    */
+*/    
 };
 
 void setNetOn(int vNetOn, int vCallFromId) {
@@ -2164,7 +2270,7 @@ void TCP() {
 
             case 3:  // Získání èasu
                 strcpy(buffer, "\x02~");
-                get_time(SEC_TIMER, buffer2);
+                get_time(SEC_TIMER, buffer2, sizeof(buffer2));
                 strcat(buffer, buffer2);
                 strcat(buffer, "\n");
                 client.print(buffer);
