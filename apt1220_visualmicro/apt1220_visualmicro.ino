@@ -265,6 +265,17 @@ SemaphoreHandle_t secTimerMutex = NULL;
 
 char c_string2[16] = { 0 };
 
+// Struktura pro pøenos dat z èteèek do fronty
+struct SerialData_t {
+    char data[100]; // Buffer pro data
+    int port;       // Port, ze kterého data pøišla (1 pro C, 2 pro D)
+};
+
+// Handle pro frontu, která bude držet pøíchozí data
+QueueHandle_t serialDataQueue;
+
+SemaphoreHandle_t i2cMutex; // Mutex pro ochranu I2C sbìrnice (LCD a RTC)
+
 ///vypnutí použití EEPROM a EspConfigLib
 /*
 void setup_inifile() {
@@ -406,6 +417,7 @@ void initializeDisplay() {
     lcd2.init();
     lcd2.backlight();
     lcd2.createChar(0, customChar);
+    lcd2.setAutoNewLine(false); // Vypne automatické posouvání na nový øádek
     lcd2.clear();
     delay(200);
     lcd2.printf("       eMISTR       ");
@@ -471,6 +483,13 @@ void setup() {
     // Create mutex for safe LCD access
     demoMutex = xSemaphoreCreateMutex();
 
+    // Vytvoøíme mutex pro ochranu sdílených I2C periferií
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("Chyba pri vytvareni I2C mutexu!");
+        // Tady bychom mohli tøeba zastavit program, protože bez toho to nebude fungovat
+    }
+
     /*
         // Create the task that will handle the demo function
         xTaskCreate(
@@ -524,6 +543,49 @@ void setup() {
 
     //rtc2.startClock();
 
+    // Vytvoøíme frontu. Mùže pojmout až 10 zpráv typu SerialData_t.
+    // Pokud by èteèky posílaly data rychleji, než je stíháme zpracovat,
+    // fronta se zaplní a další odeslání do ní poèká.
+    serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
+
+    // Zkontrolujeme, jestli se fronta úspìšnì vytvoøila
+    if (serialDataQueue == NULL) {
+        Serial.println("Chyba pri vytvareni fronty!");
+    }
+
+    // Vytvoøíme task pro zpracování pøíkazù z fronty
+    xTaskCreatePinnedToCore(
+        commandProcessorTask,   // Funkce tasku
+        "CommandProcessor",     // Jméno
+        4096,                   // Stack
+        NULL,                   // Parametry
+        2,                      // Priorita (dáme jí vyšší než ètecím taskùm)
+        NULL,                   // Handle
+        1                       // Spustíme na jádøe 1
+    );
+
+    // Vytvoøíme task pro ètení ze SerialC
+    xTaskCreatePinnedToCore(
+        serialReaderTask,       // Funkce tasku
+        "SerialC_Reader",       // Jméno
+        4096,                   // Stack
+        (void*)&SerialC,        // Parametr - pøedáme ukazatel na SerialC
+        1,                      // Priorita
+        NULL,                   // Handle
+        1                       // Spustíme také na jádøe 1
+    );
+
+    // Vytvoøíme task pro ètení ze SerialD
+    xTaskCreatePinnedToCore(
+        serialReaderTask,       // Funkce tasku
+        "SerialD_Reader",       // Jméno
+        4096,                   // Stack
+        (void*)&SerialD,        // Parametr - pøedáme ukazatel na SerialD
+        1,                      // Priorita
+        NULL,                   // Handle
+        1                       // Spustíme také na jádøe 1
+    );
+
 #ifdef DEBUG_MODE
     // Start the web server in debug mode
     server.on("/", HTTP_GET, handleRoot);
@@ -534,26 +596,103 @@ void setup() {
 #endif
 }
 
-void fast_clear_disp() {
+/**
+ * @brief Task pro ètení dat ze sériového portu.
+ * Tato funkce bìží v nekoneèné smyèce a je použitelná pro oba sériové porty.
+ * Jako parametr dostane ukazatel na HardwareSerial objekt.
+ */
+void serialReaderTask(void* parameter) {
+    HardwareSerial* serialPort = (HardwareSerial*)parameter;
+    int portNumber = (serialPort == &SerialC) ? 1 : 2;
+    SerialData_t receivedData; // Vytvoøíme si strukturu pro data
+
+    for (;;) { // Nekoneèná smyèka tasku
+        if (serialPort->available()) {
+            size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
+            if (len > 0) {
+                receivedData.data[len] = '\0'; // Ukonèíme øetìzec
+                receivedData.port = portNumber;
+
+                // Pošleme data do fronty. Pokud je fronta plná, poèkáme max 100ms.
+                if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
+                    Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
+                }
+            }
+        }
+        // Dáme plánovaèi šanci, aby se mohl vìnovat jiným úlohám.
+        // Task se na 20ms uspí a nežere zbyteènì CPU.
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+/**
+ * @brief Task pro zpracování dat z fronty.
+ * Èeká, až se ve frontì objeví data, a pak je zpracuje voláním funkce serial().
+ */
+void commandProcessorTask(void* parameter) {
+    SerialData_t dataToProcess;
+
+    for (;;) {
+        // Èekáme na data ve frontì. Task je blokován (nežere CPU), dokud nìco nepøijde.
+        // portMAX_DELAY znamená, že bude èekat "vìènì".
+        if (xQueueReceive(serialDataQueue, &dataToProcess, portMAX_DELAY) == pdTRUE) {
+            // Máme nová data, zavoláme tvou pùvodní funkci pro zpracování
+            Serial.printf("Data z fronty (port %d): %s\n", dataToProcess.port, dataToProcess.data);
+            serial(dataToProcess.data, dataToProcess.port);
+        }
+    }
+}
+
+// "Hloupá" verze - jen èistí displej, nestará se o mutex
+void _fast_clear_disp_unsafe() {
     lcd2.clear();
     lcd2.home();
-};
+}
 
-void blank_line(int line) {
+// "Chytrá" verze - wrapper, který se stará o bezpeènost
+void fast_clear_disp() {
+    // Vezmeme klíè
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+
+        _fast_clear_disp_unsafe(); // Zavoláme "hloupou" funkci
+
+        // Vrátíme klíè
+        xSemaphoreGive(i2cMutex);
+    }
+}
+
+void _blank_line_unsafe(int line) {
     lcd2.setCursor(0, line);                       // Umístí kurzor na zaèátek øádku
     lcd2.print("                    ");           // Vypíše prázdný øetìzec o 20 mezerách
     lcd2.setCursor(0, line);                       // Umístí kurzor zpìt na zaèátek øádku
 }
 
+// "Chytrá" verze - teï se stará o zamykání
+void blank_line(int line) {
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        _blank_line_unsafe(line); // Volá hloupou verzi
+        xSemaphoreGive(i2cMutex);
+    }
+}
+
 boolean load_config() {
     //naètení konfigurace z Preferences
     preferences.begin("my-app", true);
-    sprintf(ip_adr, preferences.getString("ip_adr", "192.168.222.202").c_str());
-    sprintf(ip_mask, preferences.getString("ip_mask", "255.255.255.0").c_str());
-    sprintf(ip_server, preferences.getString("ip_server", "192.168.88.221").c_str());
+    //sprintf(ip_adr, preferences.getString("ip_adr", "192.168.222.202").c_str());
+    //sprintf(ip_mask, preferences.getString("ip_mask", "255.255.255.0").c_str());
+    //sprintf(ip_server, preferences.getString("ip_server", "192.168.88.221").c_str());
+
+	snprintf(ip_adr, sizeof(ip_adr), "%s", preferences.getString("ip_adr", "192.168.222.202").c_str());
+	snprintf(ip_mask, sizeof(ip_mask), "%s", preferences.getString("ip_mask", "255.255.255.0").c_str());
+	snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.88.221").c_str());
+
 	serverIP = ip_server;
-    sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
-    sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
+    //sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
+    //sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
+
+	snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.225.221").c_str());
+	snprintf(ip_gate, sizeof(ip_gate), "%s", preferences.getString("ip_gate", "192.168.222.222").c_str());
+
     timer1 = preferences.getInt("timer1", 5);
     timer2 = preferences.getInt("timer2", 3);
     key_maker = preferences.getInt("key_maker", 0);
@@ -561,16 +700,22 @@ boolean load_config() {
     rfid_reader_d = preferences.getInt("rfid_reader_d", 0);
     id12_c = preferences.getInt("id12_c", 1);
     id12_d = preferences.getInt("id12_d", 0);
-    sprintf(op_c, preferences.getString("op_c", "A3997").c_str());
-    sprintf(op_d, preferences.getString("op_d", "").c_str());
+    //sprintf(op_c, preferences.getString("op_c", "A3997").c_str());
+    //sprintf(op_d, preferences.getString("op_d", "").c_str());
+
+	snprintf(op_c, sizeof(op_c), "%s", preferences.getString("op_c", "A3997").c_str());
+	snprintf(op_d, sizeof(op_d), "%s", preferences.getString("op_d", "").c_str());
 
     useWifi = preferences.getBool("useWifi", false);
     useETH = preferences.getBool("useETH", true);
 
 	useDHCP = preferences.getBool("useDHCP", true);
 
-    sprintf(ssid, preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
-    sprintf(password, preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
+    //sprintf(ssid, preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
+    //sprintf(password, preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
+
+	snprintf(ssid, sizeof(ssid), "%s", preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
+	snprintf(password, sizeof(password), "%s", preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
 
     ping_timeout = 4;
     preferences.end();
@@ -620,10 +765,16 @@ boolean save_config() {
 }
 
 void set_default() {
-    sprintf(ip_adr, "192.168.222.202");
-    sprintf(ip_mask, "255.255.255.0");
-    sprintf(ip_server, "192.168.225.221");
-    sprintf(ip_gate, "192.168.222.222");
+    //sprintf(ip_adr, "192.168.222.202");
+    //sprintf(ip_mask, "255.255.255.0");
+    //sprintf(ip_server, "192.168.225.221");
+    //sprintf(ip_gate, "192.168.222.222");
+
+    snprintf(ip_adr, sizeof(ip_adr), "192.168.222.202");
+	snprintf(ip_mask, sizeof(ip_mask), "255.255.255.0");
+	snprintf(ip_server, sizeof(ip_server), "192.168.225.221");
+	snprintf(ip_gate, sizeof(ip_gate), "192.168.222.222");
+
     timer1 = 5;
     timer2 = 3;
     key_maker = 0;
@@ -631,8 +782,12 @@ void set_default() {
     rfid_reader_d = 0;
     id12_c = 1;
     id12_d = 0;
-    sprintf(op_c, "A3997");
-    sprintf(op_d, "");
+    //sprintf(op_c, "A3997");
+    //sprintf(op_d, "");
+
+	snprintf(op_c, sizeof(op_c), "A3997");
+	snprintf(op_d, sizeof(op_d), "");
+
     useDHCP = true;
     ping_timeout = 4;
 
@@ -651,8 +806,9 @@ void init_lcd() {
 
 void menu_dump() {
     char long_str[20];  // Vyrovnávací pamì pro pøevedená èísla
-
-    fast_clear_disp();  // Vyèištìní displeje
+            
+    lockI2C();  // Zámek I2C sbìrnice pro bezpeèný pøístup k LCD
+	_fast_clear_disp_unsafe(); // Vyèištìní displeje
 
     // Zobrazení hodnoty fifo_start
     lcd2.setCursor(0, 0);
@@ -677,11 +833,14 @@ void menu_dump() {
     lcd2.printf("LAST:");
     ltoa(fifo_last, long_str, 10);
     lcd2.printf(long_str);
+	unlockI2C();  // Uvolnìní I2C zámku
 }
 
 void menuconfig() {
+
+    lockI2C();  // Zámek I2C sbìrnice pro bezpeèný pøístup k LCD
     long timeout_up;
-    fast_clear_disp();
+	_fast_clear_disp_unsafe(); // Vyèištìní displeje
     lcd2.setCursor(0, 0);
     lcd2.printf("IP:");
     //lcd2.printf(ip_adr);
@@ -707,11 +866,14 @@ void menuconfig() {
     lcd2.printf("VERZE: ");
     //lcd2.printf(" %s  ", VERZE_PRACANT);
     lcd2.printf(" %s  ", localVersion);
+	unlockI2C();  // Uvolnìní I2C zámku
 }
 
 void menuconfigwifi() {
+    lockI2C();  // Zámek I2C sbìrnice pro bezpeèný pøístup k LCD
     long timeout_up;
-    fast_clear_disp();
+	_fast_clear_disp_unsafe(); // Vyèištìní displeje
+
     lcd2.setCursor(0, 0);
     lcd2.printf("SSID:");
     lcd2.printf(ssid);
@@ -719,6 +881,7 @@ void menuconfigwifi() {
     lcd2.printf("VERZE: ");
     //lcd2.printf(" %s  ", VERZE_PRACANT);
     lcd2.printf(" %s  ", localVersion);
+	unlockI2C();  // Uvolnìní I2C zámku
 }
 
 void resetConfig() {
@@ -776,7 +939,9 @@ void reader_input(const char* display_str, char* data_to_fill) {
     char new_data[16] = "";  // Buffer for new data
     char buffer2[100];       // Buffer for serial input
 
-    fast_clear_disp();
+    // Vezmeme si klíè hned na zaèátku
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+		_fast_clear_disp_unsafe(); // Vyèištìní displeje
     delay(10);
 
     lcd2.setCursor(0, 0);
@@ -858,6 +1023,13 @@ void reader_input(const char* display_str, char* data_to_fill) {
             }
         }
 
+    }
+    // Až po opuštìní smyèky vrátíme klíè
+    xSemaphoreGive(i2cMutex);
+
+    }
+    else {
+        Serial.println("Chyba: reader_input nemohl ziskat I2C mutex!");
     }
 }
 
@@ -942,7 +1114,7 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
-    if ((millis() / 1000) >= timeout1) { fast_clear_disp(); }
+    if ((millis() / 1000) >= timeout1) { _fast_clear_disp_unsafe(); }
 
     // Zpracování rùzných pøíkazù
     //if (strcmp(buffer2String, "SET-IP") == 0) {
@@ -1002,8 +1174,11 @@ void serial(char* buffer2, int port) {
             }
         }
         else {
+            /*
             blank_line(0);
             lcd2.printf("FUNKCE NEPODPOROVANA");
+            */
+			display_line_unformated("FUNKCE NEPODPOROVANA", 0);
             timeout1 = SEC_TIMER + timer2;
         }
         //} else if (strcmp(buffer2, "SET-CLOCK") == 0) {
@@ -1115,14 +1290,17 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("RESET-BUFFER")) {
         reset_buffer_file();
+        /*
         blank_line(0);
         lcd2.printf("MAZU OFFLINE BUFFER");
+        */
+		display_line_unformated("MAZU OFFLINE BUFFER", 0);
         timeout1 = SEC_TIMER + timer2;
     }
     else {
         timeout1 = SEC_TIMER + timer1;
         if (saved) {
-            fast_clear_disp();
+            _fast_clear_disp_unsafe();
             saved = 0;
         }
 
@@ -1186,9 +1364,12 @@ void serial(char* buffer2, int port) {
 
         // Echo na LCD pøi offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
+            /*
             blank_line(2);
             //lcd2.printf("%s", buffer2);
             lcd2.printf("%s", buffer2String.c_str());
+            */
+			display_line_formated(buffer2String.c_str(), 2);
         }
 
         // Pøidání èasu k pøíkazùm typu D, E, J atd.
@@ -1248,9 +1429,13 @@ void serial(char* buffer2, int port) {
                                 bufferFilePath, (unsigned int)current_file_size, (unsigned int)data_to_add_size);
 
                             // Volitelnì: Zobrazit chybu i na LCD
+                            /*
                             blank_line(0); // Vymažeme øádek 0
                             lcd2.setCursor(0, 0);
                             lcd2.print("CHYBA:SOUBOR PLNY!");
+                            */
+
+							display_line_formated("CHYBA: SOUBOR PLNY!", 0);
                             timeout1 = SEC_TIMER + timer2; // Necháme zprávu viditelnou
                         }
                     }
@@ -1297,8 +1482,12 @@ void serial(char* buffer2, int port) {
 
     if (restartNetwork) {
 		//ESP.restart(); // Restart ESP32 pro aplikaci zmìn sítì
-		blank_line(3); // Vymažeme øádek 3
+		/*
+        blank_line(3); // Vymažeme øádek 3
 		lcd2.printf("RESTART SITE...");
+        */
+
+		display_line_unformated("RESTART SITE...", 3);
 
 		initializeNetwork(); // Volání funkce pro inicializaci sítì
 		restartNetwork = false; // Reset flagu po restartu sítì
@@ -1307,6 +1496,9 @@ void serial(char* buffer2, int port) {
 }
 
 void tDEMOscreen() {
+
+    // Zkusíme si vzít klíè (mutex). Pokud je obsazený, task tady poèká.
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
     char buffer2[100] = { 0 };
 
     // Zobrazení informací na LCD
@@ -1414,6 +1606,21 @@ void tDEMOscreen() {
             // --- Konec pokusu o zotavení ---
         }
     }
+    // Práce s LCD je hotová, vrátíme klíè, aby ho mohl použít nìkdo jiný.
+    xSemaphoreGive(i2cMutex);
+    }
+ else {
+     // Nepodaøilo se získat mutex do 1 sekundy, nìco je špatnì.
+     Serial.println("Chyba: tDEMOscreen nemohl ziskat I2C mutex!");
+    }
+}
+
+void lockI2C() {
+    xSemaphoreTake(i2cMutex, portMAX_DELAY);
+}
+
+void unlockI2C() {
+    xSemaphoreGive(i2cMutex);
 }
 
 void loop() {
@@ -1453,6 +1660,8 @@ void loop() {
     // Zpracování dat ze sériových portù POUZE pokud neodesíláme souborový buffer
     if (!isSendingFileBuffer) {
         // Normální zpracování SerialC a SerialD
+ 
+        /*
         if (SerialC.available()) {
             char buffer2[100] = { 0 };
             size_t len = SerialC.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
@@ -1471,6 +1680,7 @@ void loop() {
                 serial(buffer2, 2); // Voláme funkci pro zpracování dat
             }
         }
+        */
     }
     else {
         // Pokud odesíláme soubor, data ze sériových portù nezpracováváme,
@@ -1696,6 +1906,7 @@ void get_time(unsigned long thetime, char* buff) {
     gmtime_r((time_t*)&thetime, &thetm);
 
     // Vytvoøení formátovaného øetìzce s datem a èasem
+    /*
     sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
         //1900 + thetm.tm_year,    // Rok zaèíná od 1900
         RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
@@ -1705,6 +1916,16 @@ void get_time(unsigned long thetime, char* buff) {
         thetm.tm_min,            // Minuty
         thetm.tm_sec             // Sekundy
     );
+    */
+
+    snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
+        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
+        thetm.tm_mon + 1,        // Mìsíce jsou indexovány od 0
+        thetm.tm_mday,           // Den v mìsíci
+        thetm.tm_hour,           // Hodiny
+        thetm.tm_min,            // Minuty
+        thetm.tm_sec             // Sekundy
+	);
 }
 
 void get_time(char* buff) {
@@ -1714,6 +1935,15 @@ void get_time(char* buff) {
     //now = rtc2.getDateTime();
 
     // Vytvoøení formátovaného øetìzce s datem a èasem
+    snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
+        rtc2.getYear(),          // Rok (plný, napø. 2024)
+        rtc2.getMonth(),         // Mìsíc (1-12)
+        rtc2.getDay(),           // Den (1-31)
+        rtc2.getHours(),          // Hodiny (0-23)
+        rtc2.getMinutes(),        // Minuty (0-59)
+        rtc2.getSeconds()         // Sekundy (0-59)
+	);
+    /*
     sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
         rtc2.getYear(),          // Rok (plný, napø. 2024)
         rtc2.getMonth(),         // Mìsíc (1-12)
@@ -1722,6 +1952,7 @@ void get_time(char* buff) {
         rtc2.getMinutes(),        // Minuty (0-59)
         rtc2.getSeconds()         // Sekundy (0-59)
     );
+    */
 }
 
 void print_time(unsigned long thetime, char* buff)
@@ -1741,6 +1972,15 @@ void print_time(unsigned long thetime, char* buff)
         thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
     */
 
+    snprintf(buff, sizeof(buff), "%02d.%02d.%04d  %02d:%02d:%02d",
+        rtc2.getDay(),           // Den (1-31)        
+        rtc2.getMonth(),         // Mìsíc (1-12)
+        rtc2.getYear(),          // Rok (plný, napø. 2024)
+        rtc2.getHours(),          // Hodiny (0-23)
+        rtc2.getMinutes(),        // Minuty (0-59)
+        rtc2.getSeconds()         // Sekundy (0-59)
+	);
+/*
     sprintf(buff, "%02d.%02d.%04d  %02d:%02d:%02d",
         rtc2.getDay(),           // Den (1-31)        
         rtc2.getMonth(),         // Mìsíc (1-12)
@@ -1749,7 +1989,7 @@ void print_time(unsigned long thetime, char* buff)
         rtc2.getMinutes(),        // Minuty (0-59)
         rtc2.getSeconds()         // Sekundy (0-59)
     );
-
+    */
 };
 
 void setNetOn(int vNetOn, int vCallFromId) {
@@ -1935,21 +2175,30 @@ void TCP() {
                 break;
 
             case 4:
+                /*
                 blank_line(3);
                 //lcd2.printf("%s", buffer + 2);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+				display_line_formated(buffer2String.c_str(), 3); 
                 break;
             case 5:
+               /*
                 blank_line(1);
+                lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 1);
 				
                 //buffer2StringTmp = buffer + 2;
 				//buffer2StringTmp.trim();
 				//lcd2.print(buffer2StringTmp);
                 //lcd2.printf("%s", @buffer2StringTmp);
                 //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String.c_str());
+                
                 break;
             case 6:
+                /*
                 blank_line(0);
                 //lcd2.printf("%s", buffer + 2);
                 //lcd2.print(buffer + 2);
@@ -1957,31 +2206,57 @@ void TCP() {
 
                 //lcd2.printf("%s", buffer + 2);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 0);
                 break;
             case 7:
+                /*
                 blank_line(2);
                 //lcd2.printf("%s", buffer + 2);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 2);
                 break;
             case 8:
+                /*
                 blank_line(0);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 0);
                 break;
             case 0x10:
+                /*
                 blank_line(0);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+				display_line_formated(buffer2String.c_str(), 0);
                 break;
             case 0x11:
+                /*
                 blank_line(2);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 2);
                 break;
             case 18:
+                /*
                 blank_line(0);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 0);
                 break;
             case 19:
+                /*
                 blank_line(1);
                 lcd2.printf("%s", buffer2String.c_str());
+                */
+
+				display_line_formated(buffer2String.c_str(), 1);
                 break;
             case 0xB:  // Nastavení timeoutu
                 timer1 = atoi(buffer + 2);
@@ -2021,8 +2296,12 @@ void TCP() {
             case 0x18:
                 // odjistit zamek
                 //WrPortI(PEDR, &PEDRShadow, (1 << 7));
+                /*
                 blank_line(0);
                 lcd2.printf("Zamek odjisten");
+                */
+
+				display_line_unformated("Zamek odjisten", 0);
                 saved = 1;
                 timeout1 = SEC_TIMER + timer2;
                 break;
@@ -2044,6 +2323,48 @@ void TCP() {
         }
     }
 }
+
+void display_line_formated(const char* message, const int linenumber) {
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        // Všechno se dìje uvnitø jednoho zamèení
+        _blank_line_unsafe(linenumber);
+        //lcd2.setCursor(0, linenumber);
+        lcd2.printf("%s",message);
+
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+    }
+}
+
+void display_line_unformated(const char* message, const int linenumber) {
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        // Všechno se dìje uvnitø jednoho zamèení
+        _blank_line_unsafe(linenumber);
+        //lcd2.setCursor(0, linenumber);
+        lcd2.printf(message);
+
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+    }
+}
+
+void display_temporary_status(const char* message, const int linenumber) {
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        // Všechno se dìje uvnitø jednoho zamèení
+        _blank_line_unsafe(linenumber);
+        lcd2.setCursor(0, linenumber);
+        lcd2.printf(message);
+
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Poèkám
+
+        // Znovu si zamknu, abych po sobì uklidil
+        if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+            _blank_line_unsafe(linenumber);
+            xSemaphoreGive(i2cMutex);
+        }
+    }
+}
+
 void writeFile(fs::FS& fs, const char* path, const char* message) {
     Serial.printf("Writing file: %s\r\n", path);
 
