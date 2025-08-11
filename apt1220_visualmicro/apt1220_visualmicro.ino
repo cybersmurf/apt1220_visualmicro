@@ -21,6 +21,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <esp_task_wdt.h>
 
 ///vypnutí použití EEPROM a EspConfigLib
 //#include "uEEPROMLib.h"
@@ -468,6 +469,14 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    // ================== ZMÌNA START ==================
+    // KROK 1: INICIALIZACE SYNCHRONIZAÈNÍCH PRIMITIV
+    // Zavoláme naši novou funkci hned na zaèátku. Tím zajistíme,
+    // že všechny mutexy a fronty budou pøipravené pro tasky,
+    // které se spustí pozdìji v setupu.
+    initializeSyncPrimitives();
+    // =================== ZMÌNA KONEC ===================
+
     //rtc2.begin();
     //rtc2.set_12hour_mode(false);
     rtc2.setHourMode(CLOCK_H24);
@@ -507,49 +516,56 @@ void setup() {
     initializeDisplay();
 
 
-    // Create mutex for safe LCD access
-    demoMutex = xSemaphoreCreateMutex();
+    // ================== ZMÌNA START ==================
+    // Pùvodní volání pro vytváøení mutexù a fronty odsud mažeme,
+    // protože jsme je pøesunuli do funkce initializeSyncPrimitives().
 
-    // Vytvoøíme mutex pro ochranu sdílených I2C periferií
-    i2cMutex = xSemaphoreCreateMutex();
-    if (i2cMutex == NULL) {
-        Serial.println("Chyba pri vytvareni I2C mutexu!");
-        // Tady bychom mohli tøeba zastavit program, protože bez toho to nebude fungovat
-    }
+    /* PÙVODNÍ KÓD K ODSTRANÌNÍ:
+    // Create mutex for safe LCD access
+    demoMutex = xSemaphoreCreateMutex();
 
-    tcpMutex = xSemaphoreCreateMutex(); // <-- PØIDEJ TENTO ØÁDEK
-    if (tcpMutex == NULL) {
-        Serial.println("Chyba pri vytvareni TCP mutexu!");
-    }
+    // Vytvoøíme mutex pro ochranu sdílených I2C periferií
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("Chyba pri vytvareni I2C mutexu!");
+        // Tady bychom mohli tøeba zastavit program, protože bez toho to nebude fungovat
+    }
+
+    tcpMutex = xSemaphoreCreateMutex(); // <-- PØIDEJ TENTO ØÁDEK
+    if (tcpMutex == NULL) {
+        Serial.println("Chyba pri vytvareni TCP mutexu!");
+    }
+    */
+    // =================== ZMÌNA KONEC ===================
 
     /*
-        // Create the task that will handle the demo function
-        xTaskCreate(
-            tDEMOcode,          // Function to implement the task
-            "DemoTask",        // Name of the task
-            2048,              // Stack size in words
-            NULL,              // Task input parameter
-            1,                 // Priority of the task
-            &tDEMO    // Task handle
-        );
-    */
+        // Create the task that will handle the demo function
+        xTaskCreate(
+            tDEMOcode,          // Function to implement the task
+            "DemoTask",        // Name of the task
+            2048,              // Stack size in words
+            NULL,              // Task input parameter
+            1,                 // Priority of the task
+            &tDEMO    // Task handle
+        );
+    */
 
     /*
-      char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
-      int string_length = strlen(c_string);
+          char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
+          int string_length = strlen(c_string);
 
-      if (!eeprom.eeprom_write(33, (byte *) c_string, strlen(c_string))) {
-      Serial.println("Failed to store STRING");
-      } else {
-      Serial.println("STRING correctly stored");
-      }
+          if (!eeprom.eeprom_write(33, (byte *) c_string, strlen(c_string))) {
+          Serial.println("Failed to store STRING");
+          } else {
+          Serial.println("STRING correctly stored");
+          }
 
-      eeprom.eeprom_read(40, (byte *) c_string2,16);
-    */
+          eeprom.eeprom_read(40, (byte *) c_string2,16);
+        */
 
-    //Serial.println((String)loaded_default);
-    //Serial.println(activeMAC);
-    //Serial.println(useWifi ? "WIFI connect" : "ETH connect");
+        //Serial.println((String)loaded_default);
+        //Serial.println(activeMAC);
+        //Serial.println(useWifi ? "WIFI connect" : "ETH connect");
 
     rfid_c_last_time = 0;
     rfid_d_last_time = 0;
@@ -571,19 +587,27 @@ void setup() {
     //timeout1 = 999999999;
     timeout1 = 0;
     //timeout1 = millis();
-    timer_reset = SEC_TIMER + 86400;  // Denní reset 
+    timer_reset = SEC_TIMER + 86400;
+    // Denní reset 
 
     //rtc2.startClock();
 
-    // Vytvoøíme frontu. Mùže pojmout až 10 zpráv typu SerialData_t.
-    // Pokud by èteèky posílaly data rychleji, než je stíháme zpracovat,
-    // fronta se zaplní a další odeslání do ní poèká.
-    serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
+    // ================== ZMÌNA START ==================
+    // Pùvodní volání pro vytváøení fronty odsud mažeme.
 
-    // Zkontrolujeme, jestli se fronta úspìšnì vytvoøila
-    if (serialDataQueue == NULL) {
-        Serial.println("Chyba pri vytvareni fronty!");
-    }
+    /* PÙVODNÍ KÓD K ODSTRANÌNÍ:
+    // Vytvoøíme frontu. Mùže pojmout až 10 zpráv typu SerialData_t.
+    // Pokud by èteèky posílaly data rychleji, než je stíháme zpracovat,
+    // fronta se zaplní a další odeslání do ní poèká.
+    serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
+
+    // Zkontrolujeme, jestli se fronta úspìšnì vytvoøila
+    if (serialDataQueue == NULL) {
+        Serial.println("Chyba pri vytvareni fronty!");
+    }
+    */
+    // =================== ZMÌNA KONEC ===================
+
 
     // Vytvoøíme task pro zpracování pøíkazù z fronty
     xTaskCreatePinnedToCore(
@@ -767,7 +791,7 @@ boolean load_config() {
     snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.225.221").c_str());
     snprintf(ip_gate, sizeof(ip_gate), "%s", preferences.getString("ip_gate", "192.168.222.222").c_str());
 
-	serverIP = ip_server;
+
     //sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
     //sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
 
@@ -797,6 +821,8 @@ boolean load_config() {
 
     ping_timeout = 4;
     preferences.end();
+    serverIP = ip_server;
+
     return true;
 }
 
@@ -1003,7 +1029,9 @@ void resetConfig() {
     if (timer2 > 60 || timer2 < 1) timer2 = 5;
 
     // Otevøete nové TCP pøipojení
-    connectToServer();
+    //connectToServer();
+    connectToServer_safe();
+	Serial.println("TCP client reinitialized");
     /*
       if (client.connect(ip_server, serverPort)) {
           Serial.println("Reconnected to TCP server");
@@ -1266,7 +1294,8 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-CLOCK")) {
         snprintf(buffer, sizeof(buffer), "\x03~");
-        client.print(buffer);
+        //client.print(buffer);
+        tcp_print_safe(buffer);
         //} else if (strcmp(buffer2, "SET-TIM1") == 0) {
     }
     else if (buffer2String.equals("SET-TIM1")) {
@@ -1398,21 +1427,9 @@ void serial(char* buffer2, int port) {
         case 'D':
             if (key_maker == 1) {
                 snprintf(tmp2, sizeof(tmp2), "\x06AOPEN\n");
-                if (net_on) {
-                    client.print(tmp2);
-                    strcpy(tmp, "\x04");
-                }
-                else {
-                    strcpy(tmp, "\x06AOPEN\n");
-                    lcd2.printf("Zamek odjisten");
-
-                    timeout1 = SEC_TIMER + timer2;
-                }
+                tcp_print_safe(tmp2);
             }
-            else {
-                //strcpy(tmp, "\x04");
-				first_char_code[0] = '\x04'; // Uložení prvního znaku
-            }
+            first_char_code[0] = '\x04';
             break;
         case 'E':
             //strcpy(tmp, "\x08");
@@ -1487,7 +1504,8 @@ void serial(char* buffer2, int port) {
         //strcat(tmp, "\n");
         
         if (net_on) {
-            client.print(tmp);
+            //client.print(tmp);
+			tcp_print_safe(tmp); // Použití bezpeèné funkce pro komunikaci pøes TCP
         }
         else {
             //strcat(off_buffer, tmp);
@@ -1895,11 +1913,11 @@ void tDEMOrun() {
 }
 
 void logToSerial(const char* vMessage, int pLogLevel) {
-    if ((vSerialDebug) && (pLogLevel > vLogLevel)) { Serial.println(vMessage); }
+    if ((vSerialDebug) && (pLogLevel >= vLogLevel)) { Serial.println(vMessage); }
 }
 
 void logToSerial(const String vMessage, int pLogLevel) {
-    if ((vSerialDebug) && (pLogLevel > vLogLevel)) { Serial.println(vMessage); }
+    if ((vSerialDebug) && (pLogLevel >= vLogLevel)) { Serial.println(vMessage); }
 }
 
 void connectToWiFi() {
@@ -2106,22 +2124,22 @@ void setNetOn(int vNetOn, int vCallFromId) {
 
 void tLAST_PINGcode(void* parameter) {
     for (;;) {
-        // Odešleme pøíkaz ping ve formátu "\01\n" (binární 0x01 následovaný '\n')
-        if (client.connected()) {
-            if (client.write("\x01\n", 2) != 2) {
-                setNetOn(0, 15);
-            }
-            else
-            {
-                setNetOn(1, 15);
-            }
-            client.flush();  // Vyprázdní výstupní buffer
+        // Zkusíme odeslat ping pøes naši novou bezpeènou funkci.
+        // Ta v sobì kontroluje, jestli je klient pøipojený a stará se o mutex.
+        if (tcp_print_safe("\x01\n")) {
+            // Pokud funkce vrátila true, znamená to, že odeslání probìhlo.
+            setNetOn(1, 15);
         }
         else {
-            setNetOn(0, 16); //net_on = 0;  // Pokud není pøipojen, nastaví `net_on` na 0
-            connectToServer();
+            // Pokud vrátila false, odeslání se nepovedlo.
+            // Nejspíš nejsme pøipojeni.
+            setNetOn(0, 16);
+            // Zkusíme se tedy znovu bezpeènì pøipojit.
+            connectToServer_safe();
         }
-        vTaskDelay(1900 / portTICK_PERIOD_MS);
+
+        // Poèkáme a opakujeme.
+        vTaskDelay(pdMS_TO_TICKS(1900));
     }
 }
 
@@ -2137,298 +2155,167 @@ void tSEC_TIMERcode(void* parameter) {
     }
 }
 
+
+
+
 void TCP() {
-    char buffer[80] = { 0 };     // Buffer pro pøijatá data
-    char buffer2[80] = { 0 };    // Další pomocný buffer
-    int counter1;
-    struct tm thetm;
+    char buffer[80] = { 0 };
+    char buffer2[80] = { 0 };
+    struct tm thetm = {};
 
-    // Kontrola stavu pøipojení
-    if (net_on == 1 && ((long)(SEC_TIMER - last_ping) > ping_timeout)) {
-        client.stop();  // Zavøít spojení, pokud došlo k timeoutu
-        //net_on = 0;
-        Serial.println("values: " + String(SEC_TIMER) + "/" + String(last_ping) + "/" + String(ping_timeout) + "/");
-        setNetOn(0, 7);
-        //delay(200);
-        delay(5);
-    }
-    /*
-        if (!client.connected() && !inSetup) {
-              if (WiFi.status() == WL_CONNECTED) {
-                if (client.connect(serverIP, serverPort)) {  // Zmìòte na IP serveru a port
-                    SEC_TIMER = rtc.getEpoch();
-                    last_ping = SEC_TIMER;
-                    net_on = 1;
-                    //setNetOn(1,8);
-                }
-              } else {
-                  net_on = 0;
-                  //setNetOn(0,9);
-              }
+    // --- Kontrola stavu pøipojení ---
+    SEC_TIMER = millis() / 1000;
+    if (net_on == 1 && (long)(SEC_TIMER - last_ping) > ping_timeout) {
+        if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+            client.stop();
+            xSemaphoreGive(tcpMutex);
         }
-    */
-    if (!client.connected() && net_on == 1) {
-        // Restart spojení, pokud není pøipojení aktivní
-        client.stop();
-        //delay(200);
-        delay(5);
-        if (client.connect(serverIP, serverPort)) {  // Zmìòte na IP serveru a port
+        Serial.println("TCP Timeout: " + String(SEC_TIMER) + "/" + String(last_ping));
+        setNetOn(0, 7);
+    }
 
-            //SEC_TIMER = rtc2.getEpoch();
-            //SEC_TIMER = rtc2.now().unixtime();
+    // --- Reconnect, pokud jsme "on", ale socket není pøipojen ---
+    bool is_connected;
+    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        is_connected = client.connected();
+        xSemaphoreGive(tcpMutex);
+    }
+    else { return; }
 
-            SEC_TIMER = millis() / 1000;
+    if (!is_connected && net_on == 1) {
+        connectToServer_safe(); // Použijeme náš bezpeèný wrapper, který už máme
+    }
 
-            last_ping = SEC_TIMER;
-            //net_on = 1;
-            setNetOn(1, 8);
+    if (!is_connected) return;
+
+    // --- Ètení dat z klienta ---
+    while (client.available() > 0) {
+        // Bezpeèné ètení øádku (pod mutexem)
+        size_t bytes_read = 0;
+        if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+            if (client.connected() && client.available()) {
+                bytes_read = client.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
+            }
+            xSemaphoreGive(tcpMutex);
         }
         else {
-            //net_on = 0;
-            setNetOn(0, 9);
+            logToSerial("TCP: mutex timeout on read", 1);
+            break;
         }
-        //connectToServer();
-    }
 
-    if (client.connected()) {
-        // Ètení dat z klienta
-        while (client.available() > 0) {
-            int bytes_read = client.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
-            buffer[bytes_read] = '\0';  // Ukonèovací znak pro øetìzec
-            //SEC_TIMER = rtc2.getEpoch();
-            SEC_TIMER = millis() / 1000;
-            last_ping = SEC_TIMER;
-            //last_ping = rtc2.getEpoch();
-            //last_ping = rtc2.now().unixtime();
+        if (bytes_read == 0) continue;
+        buffer[bytes_read] = '\0';
 
-            logToSerial(buffer, 0);
-            logToSerial("s:" + String(SEC_TIMER), 0);
+        last_ping = millis() / 1000;
 
-            if ((buffer[0] == 'O') && (buffer[1] == 'K')) {
-                last_ping = SEC_TIMER;
+        logToSerial(buffer, 0);
 
-                //last_ping = rtc2.getEpoch();
-                //last_ping = rtc2.now().unixtime();
+        if ((buffer[0] == 'O') && (buffer[1] == 'K')) {
+            setNetOn(1, 14);
+            continue;
+        }
 
-                setNetOn(1, 14);
-            };
+        String buffer2String = buffer + 2;
+        buffer2String.trim();
 
-            logToSerial(buffer, 0);
-			int asciiVal = (int)buffer[0]; // Získání ASCII hodnoty prvního znaku
+        switch (buffer[0]) {
 
-            String buffer2String = buffer + 2;
-            buffer2String.trim();
-
-            // Ovìøení pøíchozího pøíkazu
-            switch (buffer[0]) {
-            case 2:  // Nastavení èasu
-                logToSerial(buffer, 1);
-                thetm.tm_sec = atoi(buffer + 19);
-                buffer[18] = 0;
-                thetm.tm_min = atoi(buffer + 16);
-                buffer[15] = 0;
-                thetm.tm_hour = atoi(buffer + 13);
-                buffer[12] = 0;
-                thetm.tm_mday = atoi(buffer + 10);
-                buffer[9] = 0;
-                //thetm.tm_mon = atoi(buffer + 7) - 1;
-                thetm.tm_mon = atoi(buffer + 7);
-                buffer[6] = 0;
-                //thetm.tm_year = atoi(buffer + 2) - 1900;
-                thetm.tm_year = atoi(buffer + 2);
-                logToSerial(String(thetm.tm_year), 0);
-
-                //ESP32 realtime clock
-                //rtc.setTimeStruct(thetm);
-
-                //rtc2.setEpoch(rtc.getEpoch());
-
-
-                rtc2.stopClock();
-                rtc2.setDate(thetm.tm_mday, thetm.tm_mon, atoi(buffer + 2));
-
-                //rtc2.setDate(thetm.tm_mday, thetm.tm_mon, thetm.tm_year);
-                rtc2.setTime(thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
-
-                rtc2.startClock();
-
-
-                //rtc2.adjust( mktime(&thetm) );
-
-                //SEC_TIMER = mktime(&thetm);
-
-                thetm.tm_mon = thetm.tm_mon;
-                thetm.tm_year = atoi(buffer + 2);
-
-                SEC_TIMER = mktime(&thetm);
-                //SEC_TIMER = millis() / 1000;
-                timer_reset = SEC_TIMER + 86400;
-                last_ping = SEC_TIMER;
-                //logToSerial(String(thetm.tm_year) + "-" + String(thetm.tm_mon) + "-" + String(thetm.tm_mday), 1);
-                //logToSerial(String(timer_reset) + " - " + String(SEC_TIMER),1);
-                break;
-
-            case 3:  // Získání èasu
-                strcpy(buffer, "\x02~");
-                get_time(SEC_TIMER, buffer2, sizeof(buffer2));
-                strcat(buffer, buffer2);
-                strcat(buffer, "\n");
-                client.print(buffer);
-                break;
-
-            case 1:  // Echo pøíkaz
-                client.print("OK\n");
-                break;
-
-            case 4:
-                /*
-                blank_line(3);
-                //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-				display_line_formated(buffer2String.c_str(), 3); 
-                break;
-            case 5:
-               /*
-                blank_line(1);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 1);
-				
-                //buffer2StringTmp = buffer + 2;
-				//buffer2StringTmp.trim();
-				//lcd2.print(buffer2StringTmp);
-                //lcd2.printf("%s", @buffer2StringTmp);
-                //lcd2.printf("%s", buffer + 2);
-                
-                break;
-            case 6:
-                /*
-                blank_line(0);
-                //lcd2.printf("%s", buffer + 2);
-                //lcd2.print(buffer + 2);
-                //lcd2.printf("%s", "prdel1");
-
-                //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 0);
-                break;
-            case 7:
-                /*
-                blank_line(2);
-                //lcd2.printf("%s", buffer + 2);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 2);
-                break;
-            case 8:
-                /*
-                blank_line(0);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 0);
-                break;
-            case 0x10:
-                /*
-                blank_line(0);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-				display_line_formated(buffer2String.c_str(), 0);
-                break;
-            case 0x11:
-                /*
-                blank_line(2);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 2);
-                break;
-            case 18:
-                /*
-                blank_line(0);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 0);
-                break;
-            case 19:
-                /*
-                blank_line(1);
-                lcd2.printf("%s", buffer2String.c_str());
-                */
-
-				display_line_formated(buffer2String.c_str(), 1);
-                break;
-            case 0xB:  // Nastavení timeoutu
-                timer1 = atoi(buffer + 2);
-                break;
-            case 0xC:
-                timeout1 = 0;
-                break;
-            case 0xE:  // Zobrazení zprávy na LCD
-                lcd2.setCursor(0, 0);
-                lcd2.printf("*------------------*");
-                lcd2.setCursor(0, 1);
-                lcd2.printf("|                  |");
-                //lcd2.setCursor(((20 - strlen(buffer)) / 2) + 1, 1);
-                logToSerial(buffer, 1);
-                lcd2.setCursor(((20 - buffer2String.length()) / 2) + 0, 1);
-                lcd2.printf("%s", buffer + 2);
-                //lcd2.printf("%s", buffer2String);
-                lcd2.setCursor(0, 2);
-                lcd2.printf("*------------------*");
-
-                saved = 1;
-                timeout1 = SEC_TIMER + timer2;
-                break;
-            case 0xF:
-                strcpy(buffer, "\xF~");
-                strcat(buffer, itoa(timer1, buffer2, buffer2String.length()));
-                strcat(buffer, "\n");
-                //sock_write(&socket, buffer, strlen(buffer));
-                //sock_flushnext(&socket);
-				client.print(buffer);
-                break;
-
-            case 0x16:  // Vymazání displeje
-                saved = 1;
-                timeout1 = SEC_TIMER + timer2;
-                break;
-            case 0x18:
-                // odjistit zamek
-                //WrPortI(PEDR, &PEDRShadow, (1 << 7));
-                /*
-                blank_line(0);
-                lcd2.printf("Zamek odjisten");
-                */
-
-				display_line_unformated("Zamek odjisten", 0);
-                saved = 1;
-                timeout1 = SEC_TIMER + timer2;
-                break;
-
-            case 0x22:  // Pøíkaz k signalizaci
-                strcpy(buffer, "\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07");
-                last_ping = SEC_TIMER;
-                for (counter1 = 0; counter1 <= 5; counter1++) {
-                    Serial.write(buffer, 10);  // Signalizace pomocí sériové komunikace
-                    delay(20);  // 20 ms zpoždìní
-                }
-                break;
-
-            default:
+        case 2: {
+            if (strlen(buffer) < 20) {
+                logToSerial("TCP: time msg too short", 1);
                 break;
             }
-            logToSerial("e:" + String(SEC_TIMER), 0);
-            //delay(timeout1);
+            thetm = {};
+            thetm.tm_sec = atoi(buffer + 19); buffer[18] = 0;
+            thetm.tm_min = atoi(buffer + 16); buffer[15] = 0;
+            thetm.tm_hour = atoi(buffer + 13); buffer[12] = 0;
+            thetm.tm_mday = atoi(buffer + 10); buffer[9] = 0;
+            thetm.tm_mon = atoi(buffer + 7);  buffer[6] = 0;
+            thetm.tm_year = atoi(buffer + 2);
+            rtc2.stopClock();
+            rtc2.setDate(thetm.tm_mday, thetm.tm_mon, atoi(buffer + 2));
+            rtc2.setTime(thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
+            rtc2.startClock();
+            SEC_TIMER = mktime(&thetm);
+            timer_reset = SEC_TIMER + 86400;
+            last_ping = SEC_TIMER;
+        } break;
+
+        case 3: {
+            get_time(SEC_TIMER, buffer2, sizeof(buffer2));
+            snprintf(buffer, sizeof(buffer), "\x02~%s\n", buffer2);
+            tcp_print_safe(buffer);
+        } break;
+
+        case 1: {
+            tcp_print_safe("OK\n");
+        } break;
+
+        case 4:  display_line_formated(buffer2String.c_str(), 3); break;
+        case 5:  display_line_formated(buffer2String.c_str(), 1); break;
+        case 6:  display_line_formated(buffer2String.c_str(), 0); break;
+        case 7:  display_line_formated(buffer2String.c_str(), 2); break;
+        case 8:  display_line_formated(buffer2String.c_str(), 0); break;
+        case 0x10: display_line_formated(buffer2String.c_str(), 0); break;
+        case 0x11: display_line_formated(buffer2String.c_str(), 2); break;
+        case 18: display_line_formated(buffer2String.c_str(), 0); break;
+        case 19: display_line_formated(buffer2String.c_str(), 1); break;
+
+        case 0xB: {
+            timer1 = atoi(buffer + 2);
+        } break;
+
+        case 0xC: {
+            timeout1 = 0;
+        } break;
+
+        case 0xE: {
+            if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                lcd2.setCursor(0, 0); lcd2.printf("*------------------*");
+                lcd2.setCursor(0, 1); lcd2.printf("|                  |");
+                int col = (20 - buffer2String.length()) / 2;
+                if (col < 0) col = 0;
+                lcd2.setCursor(col, 1);
+                lcd2.printf("%s", buffer + 2);
+                lcd2.setCursor(0, 2); lcd2.printf("*------------------*");
+                xSemaphoreGive(i2cMutex);
+            }
+            saved = 1;
+            timeout1 = SEC_TIMER + timer2;
+        } break;
+
+        case 0xF: {
+            char out[64] = { 0 };
+            snprintf(out, sizeof(out), "\x0F~%ld\n", timer1);
+            tcp_print_safe(out);
+        } break;
+
+        case 0x16: {
+            saved = 1;
+            timeout1 = SEC_TIMER + timer2;
+        } break;
+
+        case 0x18: {
+            display_line_unformated("Zamek odjisten", 0);
+            saved = 1;
+            timeout1 = SEC_TIMER + timer2;
+        } break;
+
+        case 0x22: {
+            last_ping = SEC_TIMER;
+            static const uint8_t beeps[10] = { 0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07 };
+            for (int i = 0; i <= 5; i++) {
+                Serial.write(beeps, sizeof(beeps));
+                delay(20);
+            }
+        } break;
+
+        default:
+            break;
         }
     }
 }
+
 
 void display_line_formated(const char* message, const int linenumber) {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
@@ -3186,6 +3073,32 @@ void send_file_buffer() {
         // Pokud odeslání selhalo, soubor nemìníme, zavøeme ho a zkusíme to znovu pozdìji
         Serial.println(" - Send failed. Buffer file remains unchanged.");
         bufferFile.close();
+    }
+}
+
+void initializeSyncPrimitives() {
+    // Create mutex for safe I2C access (LCD and RTC)
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("Chyba pri vytvareni I2C mutexu!");
+    }
+
+    // Create mutex for safe TCP client access
+    tcpMutex = xSemaphoreCreateMutex();
+    if (tcpMutex == NULL) {
+        Serial.println("Chyba pri vytvareni TCP mutexu!");
+    }
+
+    // Create mutex for the demo screen task
+    demoMutex = xSemaphoreCreateMutex();
+    if (demoMutex == NULL) {
+        Serial.println("Chyba pri vytvareni Demo mutexu!");
+    }
+
+    // Create the queue for serial data
+    serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
+    if (serialDataQueue == NULL) {
+        Serial.println("Chyba pri vytvareni fronty!");
     }
 }
 
