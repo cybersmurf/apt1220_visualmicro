@@ -266,6 +266,18 @@ SemaphoreHandle_t secTimerMutex = NULL;
 
 char c_string2[16] = { 0 };
 
+// Pole, která drží obsah pro každý øádek displeje
+char g_lcd_line0[21] = { 0 };
+char g_lcd_line1[21] = { 0 };
+char g_lcd_line2[21] = { 0 };
+char g_lcd_line3[21] = { 0 };
+
+// Pøíznak, který nám øíká, že se obsah zmìnil a je potøeba pøekreslit displej
+bool g_display_dirty = false;
+
+// Èasovaè, který nám pomùže detekovat konec dávky zpráv
+unsigned long g_last_tcp_message_time = 0;
+
 // Struktura pro pøenos dat z èteèek do fronty
 struct SerialData_t {
     char data[100]; // Buffer pro data
@@ -291,6 +303,33 @@ void setup_inifile() {
     config->addOption("wifi_password", "Password of your WiFi", "wifi_password");
 }
 */
+
+// Tato funkce vezme obsah z našich globálních bufferù a vykreslí ho na displej.
+void updateDisplayNow() {
+    // Vezmeme si klíè k I2C sbìrnici, abychom mìli jistotu, že nám do toho nic neskoèí
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+
+        // Použijeme "unsafe" verzi, protože už držíme zámek (mutex)
+        _fast_clear_disp_unsafe();
+
+        lcd2.setCursor(0, 0);
+        lcd2.print(g_lcd_line0);
+
+        lcd2.setCursor(0, 1);
+        lcd2.print(g_lcd_line1);
+
+        lcd2.setCursor(0, 2);
+        lcd2.print(g_lcd_line2);
+
+        lcd2.setCursor(0, 3);
+        lcd2.print(g_lcd_line3);
+
+        // Vrátíme klíè
+        xSemaphoreGive(i2cMutex);
+    }
+    // A oznaèíme si, že displej je teï "èistý" a není potøeba ho pøekreslovat.
+    g_display_dirty = false;
+}
 
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
@@ -2293,11 +2332,6 @@ void TCP() {
         } break;
 
         case 0xE: {
-            // Tady jsi narazil na další skvìlou vìc ke zlepšení!
-            // Pùvodní kód posílal na LCD data nadvakrát.
-            // Nový pøístup: Sestavíme si celý øádek nejdøív v pamìti ESP32
-            // a pak ho pošleme na displej najednou, což je mnohem rychlejší.
-
             // 1. Pøipravíme si buffer pro celý øádek (20 znakù + koncový nulový znak)
             char line_buffer[21];
             int msg_len = buffer2String.length();
