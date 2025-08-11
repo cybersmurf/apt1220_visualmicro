@@ -2221,24 +2221,47 @@ void TCP() {
         switch (buffer[0]) {
 
         case 2: {
-            if (strlen(buffer) < 20) {
-                logToSerial("TCP: time msg too short", 1);
-                break;
+            // Stará metoda byla náchylná k chybám. Použijeme sscanf,
+            // která je pro parsování formátovaného textu mnohem bezpeènìjší.
+            int year, month, day, hour, minute, second;
+
+            // Formát oèekáváme jako: "\x02~YYYY-MM-DD HH:MM:SS"
+            // sscanf zaène èíst až za úvodními znaky, proto dáváme buffer + 2.
+            int items_parsed = sscanf(buffer + 2, "%d-%d-%d %d:%d:%d",
+                &year, &month, &day,
+                &hour, &minute, &second);
+
+            // Zkontrolujeme, jestli se podaøilo naparsovat všech 6 hodnot
+            if (items_parsed == 6) {
+                Serial.println("Cas uspesne naparsovan ze serveru.");
+
+                // Teï správnì nastavíme strukturu tm, kterou používá mktime
+                thetm = {}; // Vynulujeme strukturu
+                thetm.tm_year = year - 1900; // tm_year je poèet let od roku 1900
+                thetm.tm_mon = month - 1;   // tm_mon je 0-11
+                thetm.tm_mday = day;
+                thetm.tm_hour = hour;
+                thetm.tm_min = minute;
+                thetm.tm_sec = second;
+
+                // A teï nastavíme samotné RTC
+                rtc2.stopClock();
+                // Pro rtc2.setDate/Time použijeme pùvodní, plné hodnoty
+                rtc2.setDate(day, month, year);
+                rtc2.setTime(hour, minute, second);
+                rtc2.startClock();
+
+                // Pøepoèítáme si i náš lokální SEC_TIMER pro interní potøeby
+                SEC_TIMER = mktime(&thetm);
+                timer_reset = SEC_TIMER + 86400;
+                last_ping = SEC_TIMER;
+
+                Serial.printf("RTC nastaveno na: %04d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, minute, second);
+
             }
-            thetm = {};
-            thetm.tm_sec = atoi(buffer + 19); buffer[18] = 0;
-            thetm.tm_min = atoi(buffer + 16); buffer[15] = 0;
-            thetm.tm_hour = atoi(buffer + 13); buffer[12] = 0;
-            thetm.tm_mday = atoi(buffer + 10); buffer[9] = 0;
-            thetm.tm_mon = atoi(buffer + 7);  buffer[6] = 0;
-            thetm.tm_year = atoi(buffer + 2);
-            rtc2.stopClock();
-            rtc2.setDate(thetm.tm_mday, thetm.tm_mon, atoi(buffer + 2));
-            rtc2.setTime(thetm.tm_hour, thetm.tm_min, thetm.tm_sec);
-            rtc2.startClock();
-            SEC_TIMER = mktime(&thetm);
-            timer_reset = SEC_TIMER + 86400;
-            last_ping = SEC_TIMER;
+            else {
+                Serial.printf("CHYBA: Nepodarilo se naparsovat cas ze serveru! Prijato: %s\n", buffer);
+            }
         } break;
 
         case 3: {
@@ -2270,16 +2293,45 @@ void TCP() {
         } break;
 
         case 0xE: {
+            // Tady jsi narazil na další skvìlou vìc ke zlepšení!
+            // Pùvodní kód posílal na LCD data nadvakrát.
+            // Nový pøístup: Sestavíme si celý øádek nejdøív v pamìti ESP32
+            // a pak ho pošleme na displej najednou, což je mnohem rychlejší.
+
+            // 1. Pøipravíme si buffer pro celý øádek (20 znakù + koncový nulový znak)
+            char line_buffer[21];
+            int msg_len = buffer2String.length();
+
+            // Omezíme délku zprávy, aby se nám vešla do rámeèku (mezi '|' a '|')
+            if (msg_len > 18) {
+                msg_len = 18;
+            }
+
+            // 2. Vypoèítáme odsazení pro vycentrování textu
+            int padding_left = (18 - msg_len) / 2;
+            int padding_right = 18 - msg_len - padding_left;
+
+            // 3. Sestavíme celý øádek pomocí funkce snprintf.
+            // Použijeme trik s hvìzdièkou v %s, který nám umožní dynamicky nastavit
+            // šíøku mezer pro zarovnání.
+            snprintf(line_buffer, sizeof(line_buffer), "|%*s%.*s%*s|",
+                padding_left, "",                 // Levé odsazení (mezery)
+                msg_len, buffer2String.c_str(),   // Vystøedìná zpráva
+                padding_right, ""                  // Pravé odsazení (zbytek mezer)
+            );
+
+            // 4. Teï, když máme vše pøipraveno, zamkneme I2C a pošleme to na displej
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                 lcd2.setCursor(0, 0); lcd2.printf("*------------------*");
-                lcd2.setCursor(0, 1); lcd2.printf("|                  |");
-                int col = (20 - buffer2String.length()) / 2;
-                if (col < 0) col = 0;
-                lcd2.setCursor(col, 1);
-                lcd2.printf("%s", buffer + 2);
+
+                // Pošleme náš hotový, sestavený øádek najednou
+                lcd2.setCursor(0, 1);
+                lcd2.print(line_buffer);
+
                 lcd2.setCursor(0, 2); lcd2.printf("*------------------*");
                 xSemaphoreGive(i2cMutex);
             }
+
             saved = 1;
             timeout1 = SEC_TIMER + timer2;
         } break;
