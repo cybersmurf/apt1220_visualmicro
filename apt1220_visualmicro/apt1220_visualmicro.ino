@@ -266,17 +266,7 @@ SemaphoreHandle_t secTimerMutex = NULL;
 
 char c_string2[16] = { 0 };
 
-// Pole, která drží obsah pro každý øádek displeje
-char g_lcd_line0[21] = { 0 };
-char g_lcd_line1[21] = { 0 };
-char g_lcd_line2[21] = { 0 };
-char g_lcd_line3[21] = { 0 };
-
-// Pøíznak, který nám øíká, že se obsah zmìnil a je potøeba pøekreslit displej
-bool g_display_dirty = false;
-
-// Èasovaè, který nám pomùže detekovat konec dávky zpráv
-unsigned long g_last_tcp_message_time = 0;
+static char g_last_tcp_command_code = 0;
 
 // Struktura pro pøenos dat z èteèek do fronty
 struct SerialData_t {
@@ -303,33 +293,6 @@ void setup_inifile() {
     config->addOption("wifi_password", "Password of your WiFi", "wifi_password");
 }
 */
-
-// Tato funkce vezme obsah z našich globálních bufferù a vykreslí ho na displej.
-void updateDisplayNow() {
-    // Vezmeme si klíè k I2C sbìrnici, abychom mìli jistotu, že nám do toho nic neskoèí
-    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-
-        // Použijeme "unsafe" verzi, protože už držíme zámek (mutex)
-        _fast_clear_disp_unsafe();
-
-        lcd2.setCursor(0, 0);
-        lcd2.print(g_lcd_line0);
-
-        lcd2.setCursor(0, 1);
-        lcd2.print(g_lcd_line1);
-
-        lcd2.setCursor(0, 2);
-        lcd2.print(g_lcd_line2);
-
-        lcd2.setCursor(0, 3);
-        lcd2.print(g_lcd_line3);
-
-        // Vrátíme klíè
-        xSemaphoreGive(i2cMutex);
-    }
-    // A oznaèíme si, že displej je teï "èistý" a není potøeba ho pøekreslovat.
-    g_display_dirty = false;
-}
 
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
@@ -2222,14 +2185,19 @@ void TCP() {
     else { return; }
 
     if (!is_connected && net_on == 1) {
-        connectToServer_safe(); // Použijeme náš bezpeèný wrapper, který už máme
+        connectToServer_safe();
     }
 
     if (!is_connected) return;
 
+    // Pokud nejsou žádná data, nic nedìláme a resetujeme si pamì posledního pøíkazu
+    if (client.available() == 0) {
+        g_last_tcp_command_code = 0;
+        return;
+    }
+
     // --- Ètení dat z klienta ---
     while (client.available() > 0) {
-        // Bezpeèné ètení øádku (pod mutexem)
         size_t bytes_read = 0;
         if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             if (client.connected() && client.available()) {
@@ -2246,11 +2214,11 @@ void TCP() {
         buffer[bytes_read] = '\0';
 
         last_ping = millis() / 1000;
-
         logToSerial(buffer, 0);
 
         if ((buffer[0] == 'O') && (buffer[1] == 'K')) {
             setNetOn(1, 14);
+            g_last_tcp_command_code = 0; // 'OK' není pøíkaz pro displej, resetujeme
             continue;
         }
 
@@ -2258,147 +2226,55 @@ void TCP() {
         buffer2String.trim();
 
         switch (buffer[0]) {
-
         case 2: {
-            // Stará metoda byla náchylná k chybám. Použijeme sscanf,
-            // která je pro parsování formátovaného textu mnohem bezpeènìjší.
             int year, month, day, hour, minute, second;
-
-            // Formát oèekáváme jako: "\x02~YYYY-MM-DD HH:MM:SS"
-            // sscanf zaène èíst až za úvodními znaky, proto dáváme buffer + 2.
-            int items_parsed = sscanf(buffer + 2, "%d-%d-%d %d:%d:%d",
-                &year, &month, &day,
-                &hour, &minute, &second);
-
-            // Zkontrolujeme, jestli se podaøilo naparsovat všech 6 hodnot
-            if (items_parsed == 6) {
-                Serial.println("Cas uspesne naparsovan ze serveru.");
-
-                // Teï správnì nastavíme strukturu tm, kterou používá mktime
-                thetm = {}; // Vynulujeme strukturu
-                thetm.tm_year = year - 1900; // tm_year je poèet let od roku 1900
-                thetm.tm_mon = month - 1;   // tm_mon je 0-11
-                thetm.tm_mday = day;
-                thetm.tm_hour = hour;
-                thetm.tm_min = minute;
-                thetm.tm_sec = second;
-
-                // A teï nastavíme samotné RTC
-                rtc2.stopClock();
-                // Pro rtc2.setDate/Time použijeme pùvodní, plné hodnoty
-                rtc2.setDate(day, month, year);
-                rtc2.setTime(hour, minute, second);
-                rtc2.startClock();
-
-                // Pøepoèítáme si i náš lokální SEC_TIMER pro interní potøeby
-                SEC_TIMER = mktime(&thetm);
-                timer_reset = SEC_TIMER + 86400;
-                last_ping = SEC_TIMER;
-
-                Serial.printf("RTC nastaveno na: %04d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, minute, second);
-
-            }
-            else {
-                Serial.printf("CHYBA: Nepodarilo se naparsovat cas ze serveru! Prijato: %s\n", buffer);
-            }
+            int items_parsed = sscanf(buffer + 2, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+            if (items_parsed == 6) { rtc2.stopClock(); rtc2.setDate(day, month, year); rtc2.setTime(hour, minute, second); rtc2.startClock(); }
         } break;
-
-        case 3: {
-            get_time(SEC_TIMER, buffer2, sizeof(buffer2));
-            snprintf(buffer, sizeof(buffer), "\x02~%s\n", buffer2);
-            tcp_print_safe(buffer);
-        } break;
-
-        case 1: {
-            tcp_print_safe("OK\n");
-        } break;
-
-        case 4:  display_line_formated(buffer2String.c_str(), 3); break;
-        case 5:  display_line_formated(buffer2String.c_str(), 1); break;
-        case 6:  display_line_formated(buffer2String.c_str(), 0); break;
-        case 7:  display_line_formated(buffer2String.c_str(), 2); break;
-        case 8:  display_line_formated(buffer2String.c_str(), 0); break;
+        case 3: { get_time(SEC_TIMER, buffer2, sizeof(buffer2)); snprintf(buffer, sizeof(buffer), "\x02~%s\n", buffer2); tcp_print_safe(buffer); } break;
+        case 1: { tcp_print_safe("OK\n"); } break;
+        case 4: display_line_formated(buffer2String.c_str(), 3); break;
+        case 5: display_line_formated(buffer2String.c_str(), 1); break;
+        case 6: display_line_formated(buffer2String.c_str(), 0); break;
+        case 7: display_line_formated(buffer2String.c_str(), 2); break;
+        case 8: display_line_formated(buffer2String.c_str(), 0); break;
         case 0x10: display_line_formated(buffer2String.c_str(), 0); break;
         case 0x11: display_line_formated(buffer2String.c_str(), 2); break;
         case 18: display_line_formated(buffer2String.c_str(), 0); break;
         case 19: display_line_formated(buffer2String.c_str(), 1); break;
-
-        case 0xB: {
-            timer1 = atoi(buffer + 2);
-        } break;
-
-        case 0xC: {
-            timeout1 = 0;
-        } break;
+        case 0xB: { timer1 = atoi(buffer + 2); } break;
+        case 0xC: { timeout1 = 0; } break;
 
         case 0xE: {
-            // 1. Pøipravíme si buffer pro celý øádek (20 znakù + koncový nulový znak)
             char line_buffer[21];
             int msg_len = buffer2String.length();
-
-            // Omezíme délku zprávy, aby se nám vešla do rámeèku (mezi '|' a '|')
-            if (msg_len > 18) {
-                msg_len = 18;
-            }
-
-            // 2. Vypoèítáme odsazení pro vycentrování textu
+            if (msg_len > 18) { msg_len = 18; }
             int padding_left = (18 - msg_len) / 2;
             int padding_right = 18 - msg_len - padding_left;
+            snprintf(line_buffer, sizeof(line_buffer), "|%*s%.*s%*s|", padding_left, "", msg_len, buffer2String.c_str(), padding_right, "");
 
-            // 3. Sestavíme celý øádek pomocí funkce snprintf.
-            // Použijeme trik s hvìzdièkou v %s, který nám umožní dynamicky nastavit
-            // šíøku mezer pro zarovnání.
-            snprintf(line_buffer, sizeof(line_buffer), "|%*s%.*s%*s|",
-                padding_left, "",                 // Levé odsazení (mezery)
-                msg_len, buffer2String.c_str(),   // Vystøedìná zpráva
-                padding_right, ""                  // Pravé odsazení (zbytek mezer)
-            );
-
-            // 4. Teï, když máme vše pøipraveno, zamkneme I2C a pošleme to na displej
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-                lcd2.setCursor(0, 0); lcd2.printf("*------------------*");
-
-                // Pošleme náš hotový, sestavený øádek najednou
+                // ============== ZDE JE TA MAGIE ==============
+                // Pokud pøedchozí pøíkaz nebyl také rámeèek, vykreslíme ho celý.
+                if (g_last_tcp_command_code != 0xE) {
+                    lcd2.setCursor(0, 0); lcd2.printf("*------------------*");
+                    lcd2.setCursor(0, 2); lcd2.printf("*------------------*");
+                }
+                // Ale text na prostøedním øádku aktualizujeme VŽDY.
                 lcd2.setCursor(0, 1);
                 lcd2.print(line_buffer);
-
-                lcd2.setCursor(0, 2); lcd2.printf("*------------------*");
                 xSemaphoreGive(i2cMutex);
             }
 
             saved = 1;
             timeout1 = SEC_TIMER + timer2;
         } break;
-
-        case 0xF: {
-            char out[64] = { 0 };
-            snprintf(out, sizeof(out), "\x0F~%ld\n", timer1);
-            tcp_print_safe(out);
-        } break;
-
-        case 0x16: {
-            saved = 1;
-            timeout1 = SEC_TIMER + timer2;
-        } break;
-
-        case 0x18: {
-            display_line_unformated("Zamek odjisten", 0);
-            saved = 1;
-            timeout1 = SEC_TIMER + timer2;
-        } break;
-
-        case 0x22: {
-            last_ping = SEC_TIMER;
-            static const uint8_t beeps[10] = { 0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07 };
-            for (int i = 0; i <= 5; i++) {
-                Serial.write(beeps, sizeof(beeps));
-                delay(20);
-            }
-        } break;
-
-        default:
-            break;
+        case 0x18: { display_line_unformated("Zamek odjisten", 0); saved = 1; timeout1 = SEC_TIMER + timer2; } break;
+        default: break;
         }
+
+        // Na konci zpracování si zapamatujeme kód aktuálního pøíkazu pro pøíští smyèku.
+        g_last_tcp_command_code = buffer[0];
     }
 }
 
