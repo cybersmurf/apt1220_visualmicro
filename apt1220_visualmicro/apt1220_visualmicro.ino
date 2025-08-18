@@ -188,45 +188,14 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-const String localVersion = "1.0.1.5";
+const String localVersion = "1.0.1.6";
 
-//String currentVersion = "1.0.1.2";
 String newVersion = "";
 
 // URL k souboru, kde je uvedena aktuální verze firmware na serveru
-//const char* versionURL = "http://192.168.222.114:82/ota_update/version.txt";
 const char* versionURL = "https://petrsramek.eu/emistr/apt1220/version.txt";
 // URL k novému firmware (binární soubor)
-//const char* firmwareURL = "http://192.168.222.114:82/ota_update/firmware.bin";
 const char* firmwareURL = "https://petrsramek.eu/emistr/apt1220/firmware.bin";
-
-// Define your server's Root CA certificate (same as before)
-const char* rootCACertificate_OTA = \
-"---- - BEGIN CERTIFICATE---- -\n" \
-"MIIEGzCCAwOgAwIBAgIQCvUoYPNvi0rvR6nXFMo29zANBgkqhkiG9w0BAQsFADBI\n" \
-"MRswGQYDVQQDDBJFU0VUIFNTTCBGaWx0ZXIgQ0ExHDAaBgNVBAoME0VTRVQsIHNw\n" \
-"b2wuIHMgci4gby4xCzAJBgNVBAYTAlNLMB4XDTI1MDUxOTAxMDQ0N1oXDTI1MDgx\n" \
-"NzAxMDQ0NlowGDEWMBQGA1UEAxMNcGV0cnNyYW1lay5ldTCCASIwDQYJKoZIhvcN\n" \
-"AQEBBQADggEPADCCAQoCggEBANioEA3ZQhl17xZj7RUfFKKYctlCsHUFLSeDjKYw\n" \
-"LYIgPaXIQW7uq6bkoZbiXU + 0MFNYENs2we1lSZbvTuSLV1n5edc4ZYUiHmoY1d9i\n" \
-"qMy5WqbcOEDqzIbG9DPr580gqOI1PzqfZ6UYb5FTZyziA3mI86s4ZDPsVPK9PAdV\n" \
-"hzdooV5vYqxmV6JpQLSkOIkmLvd + hBya + g9vTlRYW1rX / CnHxkznv6CM2 + Uh / A9R\n" \
-"8vNAdL07zcYiu9Fyl6Qg3wTbMxFY9xmFrX3CcQCRsRJi1ONNUKRDWlRdytqoRsoC\n" \
-"WPZbocYwVJlGkfbtdLUN + 7vQHvTmnfVeu7uNeN8b93zS9msCAwEAAaOCAS8wggEr\n" \
-"MAsGA1UdDwQEAwIFoDAdBgNVHQ4EFgQUtzIVdxcqkyQXEAq1eXFpz + w9Ix4wHwYD\n" \
-"VR0jBBgwFoAUqM1h + TUmOXLCXdRGzRli / gxXjaUwHQYDVR0lBBYwFAYIKwYBBQUH\n" \
-"AwEGCCsGAQUFBwMCMAwGA1UdEwEB / wQCMAAwga4GA1UdEQSBpjCBo4ITYWRhbTMu\n" \
-"cGV0cnNyYW1lay5ldYIXYWRhbWZpbmFsLnBldHJzcmFtZWsuZXWCC2RlbHBoaTR1\n" \
-"LmV1gg9rb2xvcHJvYWRhbWEuY3qCDXBldHJzcmFtZWsuZXWCD3d3dy5kZWxwaGk0\n" \
-"dS5ldYITd3d3LmtvbG9wcm9hZGFtYS5jeoIRd3d3LnBldHJzcmFtZWsuZXWCDXd3\n" \
-"dy5zdWRhdGEuZXUwDQYJKoZIhvcNAQELBQADggEBAFr8bG2SZCg2GZL8jyCA / iu /\n" \
-"77A8NBrSXVmKSM7bgzqQDQ / QxIYR1T7a / dyhG6ZX4XY8Owj30GXPuQQwbR + gTWoD\n" \
-"QasEBwuNywEXVt9XFKkP4O / uwewCNRadLFAqu5GT0rTgMtECbtuJ1MiusumatLUu\n" \
-"V / AFTVzxm6abtXAq8xUrR1248kOtXW9hgl174ENIg + xRr261bn8PBrorhxuK + btD\n" \
-"kxoM0ROe5T0zjNawX3KzIMiuq / qf758abSTfRa2rKtzi63pVvHRbnDjXCziOzadP\n" \
-"z1bfP984ztj80YymWtufoXRIpB7f / BjujEjzmmsdFlxg6Cp5FCmeKv5VUTxqY8Q =\n" \
-"---- - END CERTIFICATE---- -\n";
-
 
 const char* firmwareFTP = "update.emistr.cz";
 const char* firmwareFTPPath = "/apt1220";
@@ -278,21 +247,6 @@ struct SerialData_t {
 QueueHandle_t serialDataQueue;
 
 SemaphoreHandle_t i2cMutex; // Mutex pro ochranu I2C sbìrnice (LCD a RTC)
-
-///vypnutí použití EEPROM a EspConfigLib
-/*
-void setup_inifile() {
-    configFsC = new uEspConfigLibFSLittlefs("/config.ini", true);
-    if (configFsC->status() == uEspConfigLibFS_STATUS_FATAL) {
-        Serial.println("  * Error initializing FS LittleFS");
-    }
-
-    config = new uEspConfigLib(configFsC);
-
-    config->addOption("wifi_ssid", "SSID of your WiFi", "Unconfigured_device");
-    config->addOption("wifi_password", "Password of your WiFi", "wifi_password");
-}
-*/
 
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
@@ -457,8 +411,6 @@ void initializeDisplay() {
     lcd2.setCursor(0, 3);
     lcd2.printf("Verze FW: %s", localVersion);
     delay(200);
-    //rtc2.setHourMode(CLOCK_H24);
-    //rtc2.startClock();
 }
 
 void loadConfiguration() {
@@ -472,35 +424,21 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    // ================== ZMÌNA START ==================
     // KROK 1: INICIALIZACE SYNCHRONIZAÈNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na zaèátku. Tím zajistíme,
     // že všechny mutexy a fronty budou pøipravené pro tasky,
     // které se spustí pozdìji v setupu.
     initializeSyncPrimitives();
-    // =================== ZMÌNA KONEC ===================
 
-    //rtc2.begin();
-    //rtc2.set_12hour_mode(false);
     rtc2.setHourMode(CLOCK_H24);
-    //rtc2.setYear(2021);
 
     if (!rtc2.isRunning()) {
         Serial.println("RTC is NOT running, let's set the time!");
-        //rtc2.startClock();
-        //rtc2.begin(Wire); // adjust(DateTime(2014, 1, 21, 3, 0, 0));
         rtc2.startClock();
     }
 
     initializeHardware();
     initializeFileSystem();
-
-
-    ///vypnutí použití EEPROM a EspConfigLib
-    //setup_inifile();
-
-    ///vypnutí použití EEPROM a EspConfigLib
-    //eeprom.eeprom_read(240, &loaded_default);
 
     delay(100);
 
@@ -508,67 +446,12 @@ void setup() {
 
     initializeNetwork();
 
-    // Kontrola aktualizací již pøi spuštìní
-    //checkForUpdates();
-
     initializeTasks();
 
     // Inicializace OTA
     setupOTA();
 
     initializeDisplay();
-
-
-    // ================== ZMÌNA START ==================
-    // Pùvodní volání pro vytváøení mutexù a fronty odsud mažeme,
-    // protože jsme je pøesunuli do funkce initializeSyncPrimitives().
-
-    /* PÙVODNÍ KÓD K ODSTRANÌNÍ:
-    // Create mutex for safe LCD access
-    demoMutex = xSemaphoreCreateMutex();
-
-    // Vytvoøíme mutex pro ochranu sdílených I2C periferií
-    i2cMutex = xSemaphoreCreateMutex();
-    if (i2cMutex == NULL) {
-        Serial.println("Chyba pri vytvareni I2C mutexu!");
-        // Tady bychom mohli tøeba zastavit program, protože bez toho to nebude fungovat
-    }
-
-    tcpMutex = xSemaphoreCreateMutex(); // <-- PØIDEJ TENTO ØÁDEK
-    if (tcpMutex == NULL) {
-        Serial.println("Chyba pri vytvareni TCP mutexu!");
-    }
-    */
-    // =================== ZMÌNA KONEC ===================
-
-    /*
-        // Create the task that will handle the demo function
-        xTaskCreate(
-            tDEMOcode,          // Function to implement the task
-            "DemoTask",        // Name of the task
-            2048,              // Stack size in words
-            NULL,              // Task input parameter
-            1,                 // Priority of the task
-            &tDEMO    // Task handle
-        );
-    */
-
-    /*
-          char c_string[128] = "abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()ABCDEFGHIJKLMNOPQ";
-          int string_length = strlen(c_string);
-
-          if (!eeprom.eeprom_write(33, (byte *) c_string, strlen(c_string))) {
-          Serial.println("Failed to store STRING");
-          } else {
-          Serial.println("STRING correctly stored");
-          }
-
-          eeprom.eeprom_read(40, (byte *) c_string2,16);
-        */
-
-        //Serial.println((String)loaded_default);
-        //Serial.println(activeMAC);
-        //Serial.println(useWifi ? "WIFI connect" : "ETH connect");
 
     rfid_c_last_time = 0;
     rfid_d_last_time = 0;
@@ -587,30 +470,9 @@ void setup() {
     if ((timer1 > 30) || (timer1 < 1)) timer1 = 15;
     if ((timer2 > 30) || (timer2 < 1)) timer2 = 3;
 
-    //timeout1 = 999999999;
     timeout1 = 0;
-    //timeout1 = millis();
     timer_reset = SEC_TIMER + 86400;
     // Denní reset 
-
-    //rtc2.startClock();
-
-    // ================== ZMÌNA START ==================
-    // Pùvodní volání pro vytváøení fronty odsud mažeme.
-
-    /* PÙVODNÍ KÓD K ODSTRANÌNÍ:
-    // Vytvoøíme frontu. Mùže pojmout až 10 zpráv typu SerialData_t.
-    // Pokud by èteèky posílaly data rychleji, než je stíháme zpracovat,
-    // fronta se zaplní a další odeslání do ní poèká.
-    serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
-
-    // Zkontrolujeme, jestli se fronta úspìšnì vytvoøila
-    if (serialDataQueue == NULL) {
-        Serial.println("Chyba pri vytvareni fronty!");
-    }
-    */
-    // =================== ZMÌNA KONEC ===================
-
 
     // Vytvoøíme task pro zpracování pøíkazù z fronty
     xTaskCreatePinnedToCore(
@@ -784,19 +646,11 @@ void connectToServer_safe() {
 boolean load_config() {
     //naètení konfigurace z Preferences
     preferences.begin("my-app", true);
-    //sprintf(ip_adr, preferences.getString("ip_adr", "192.168.222.202").c_str());
-    //sprintf(ip_mask, preferences.getString("ip_mask", "255.255.255.0").c_str());
-    //sprintf(ip_server, preferences.getString("ip_server", "192.168.88.221").c_str());
 
 	snprintf(ip_adr, sizeof(ip_adr), "%s", preferences.getString("ip_adr", "192.168.222.202").c_str());
 	snprintf(ip_mask, sizeof(ip_mask), "%s", preferences.getString("ip_mask", "255.255.255.0").c_str());
-	//snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.88.221").c_str());
     snprintf(ip_server, sizeof(ip_server), "%s", preferences.getString("ip_server", "192.168.225.221").c_str());
     snprintf(ip_gate, sizeof(ip_gate), "%s", preferences.getString("ip_gate", "192.168.222.222").c_str());
-
-
-    //sprintf(ip_server, preferences.getString("ip_server", "192.168.225.221").c_str());
-    //sprintf(ip_gate, preferences.getString("ip_gate", "192.168.222.222").c_str());
 
     timer1 = preferences.getInt("timer1", 5);
     timer2 = preferences.getInt("timer2", 3);
@@ -805,10 +659,8 @@ boolean load_config() {
     rfid_reader_d = preferences.getInt("rfid_reader_d", 0);
     id12_c = preferences.getInt("id12_c", 1);
     id12_d = preferences.getInt("id12_d", 0);
-    //sprintf(op_c, preferences.getString("op_c", "A3997").c_str());
-    //sprintf(op_d, preferences.getString("op_d", "").c_str());
 
-	snprintf(op_c, sizeof(op_c), "%s", preferences.getString("op_c", "A3997").c_str());
+    snprintf(op_c, sizeof(op_c), "%s", preferences.getString("op_c", "A3997").c_str());
 	snprintf(op_d, sizeof(op_d), "%s", preferences.getString("op_d", "").c_str());
 
     useWifi = preferences.getBool("useWifi", false);
@@ -816,10 +668,7 @@ boolean load_config() {
 
 	useDHCP = preferences.getBool("useDHCP", true);
 
-    //sprintf(ssid, preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
-    //sprintf(password, preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
-
-	snprintf(ssid, sizeof(ssid), "%s", preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
+    snprintf(ssid, sizeof(ssid), "%s", preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
 	snprintf(password, sizeof(password), "%s", preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
 
     ping_timeout = 4;
@@ -838,12 +687,6 @@ boolean save_config() {
     preferences.putString("ip_gate", ip_gate);
     preferences.putString("op_c", op_c);
     preferences.putString("op_d", op_d);
-    //sprintf(ip_adr,   preferences.getString("ip_adr",   "192.168.222.202").c_str());
-    //sprintf(ip_mask,  preferences.getString("ip_mask",  "255.255.255.0").c_str());
-    //sprintf(ip_server,preferences.getString("ip_server","192.168.225.221").c_str());
-    //sprintf(ip_gate,  preferences.getString("ip_gate",  "192.168.222.222").c_str());
-    //sprintf(op_c,preferences.getString("op_c",  "A3997").c_str());
-    //sprintf(op_d,preferences.getString("op_d",  "").c_str());  
 
     preferences.putInt("timer1", timer1);
     preferences.putInt("timer2", timer2);
@@ -852,13 +695,6 @@ boolean save_config() {
     preferences.putInt("rfid_reader_d", rfid_reader_d);
     preferences.putInt("id12_c", id12_c);
     preferences.putInt("id12_d", id12_d);
-    //timer1 = preferences.getInt("timer1",5);
-    //timer2 = preferences.getInt("timer2",3);
-    //key_maker = preferences.getInt("key_maker",0);
-    //rfid_reader_c = preferences.getInt("rfid_reader_c",1);
-    //rfid_reader_d = preferences.getInt("rfid_reader_d",0);
-    //id12_c = preferences.getInt("id12_c",1);
-    //id12_d = preferences.getInt("id12_d",0);
 
     preferences.putBool("useWifi", useWifi);
     preferences.putBool("useETH", useETH);
@@ -872,11 +708,6 @@ boolean save_config() {
 }
 
 void set_default() {
-    //sprintf(ip_adr, "192.168.222.202");
-    //sprintf(ip_mask, "255.255.255.0");
-    //sprintf(ip_server, "192.168.225.221");
-    //sprintf(ip_gate, "192.168.222.222");
-
     snprintf(ip_adr, sizeof(ip_adr), "192.168.222.202");
 	snprintf(ip_mask, sizeof(ip_mask), "255.255.255.0");
 	snprintf(ip_server, sizeof(ip_server), "192.168.225.221");
@@ -889,18 +720,15 @@ void set_default() {
     rfid_reader_d = 0;
     id12_c = 1;
     id12_d = 0;
-    //sprintf(op_c, "A3997");
-    //sprintf(op_d, "");
 
-	snprintf(op_c, sizeof(op_c), "A3997");
+    snprintf(op_c, sizeof(op_c), "A3997");
 	snprintf(op_d, sizeof(op_d), "");
 
     useDHCP = true;
     ping_timeout = 4;
 
     loaded_default = 1;
-    ///vypnutí použití EEPROM a EspConfigLib
-    //eeprom.eeprom_write(240, &loaded_default);
+
     saveNewConfigData = true;
 }
 
@@ -1032,29 +860,19 @@ void resetConfig() {
     if (timer2 > 60 || timer2 < 1) timer2 = 5;
 
     // Otevøete nové TCP pøipojení
-    //connectToServer();
     connectToServer_safe();
 	Serial.println("TCP client reinitialized");
-    /*
-      if (client.connect(ip_server, serverPort)) {
-          Serial.println("Reconnected to TCP server");
-      } else {
-          Serial.println("Failed to reconnect to TCP server");
-      }
-    */
 }
 
 void reader_input(const char* display_str, char* data_to_fill) {
     char new_data[16] = "";  // Buffer pro nová data
     char buffer2[100];       // Buffer pro sériový vstup
 
-    // ================== ZMÌNA START ==================
     // TOTO JE TEN TRIK:
     // Nastavíme timeout pro pøekreslení hlavní obrazovky na dalekou budoucnost (tøeba hodinu).
     // Tím zajistíme, že zatímco my tady èekáme na vstup, funkce loop() nezavolá tDEMOscreen()
     // a nepokusí se nám sáhnout na I2C sbìrnici.
     timeout1 = SEC_TIMER + 3600;
-    // =================== ZMÌNA KONEC ===================
 
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         _fast_clear_disp_unsafe();
@@ -1137,11 +955,9 @@ void reader_input(const char* display_str, char* data_to_fill) {
         Serial.println("Chyba: reader_input nemohl ziskat I2C mutex!");
     }
 
-    // ================== ZMÌNA START ==================
     // Po opuštìní funkce nastavíme timeout na nulu, abychom vynutili
     // okamžité pøekreslení hlavní obrazovky s pøípadnými novými daty.
     timeout1 = 0;
-    // =================== ZMÌNA KONEC ===================
 }
 
 /*
@@ -1795,9 +1611,9 @@ void loop() {
             if (bufferFileCheck) bufferFileCheck.close();
 
             if (fileHasData) {
-                isSendingFileBuffer = true;  // Nastavíme flag, že se chystáme odesílat.
-                send_entire_file_buffer();   // Pokusíme se odeslat celý buffer.
-                isSendingFileBuffer = false; // Po dokonèení pokusu flag zase shodíme.
+                isSendingFileBuffer = true;
+                send_entire_file_buffer();
+                isSendingFileBuffer = false;
             }
         }
     }
@@ -1807,9 +1623,8 @@ void loop() {
         tDEMOscreen();
     }
 
-    // Malá pauza, aby loop() nebìžela naprázdno a dala prostor ostatním taskùm.
-    // V projektu s FreeRTOS je to dobrá praxe.
-    delay(5);
+    // Použijeme vTaskDelay pro lepší spolupráci s FreeRTOS.
+    vTaskDelay(pdMS_TO_TICKS(5));
 }
 
 
