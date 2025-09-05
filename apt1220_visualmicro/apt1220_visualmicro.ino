@@ -188,7 +188,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-const String localVersion = "1.0.1.6";
+static String localVersion = "1.0.1.6";
 
 String newVersion = "";
 
@@ -423,6 +423,8 @@ void loadConfiguration() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
+
+    localVersion = "1.0.1.6";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAÈNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na zaèátku. Tím zajistíme,
