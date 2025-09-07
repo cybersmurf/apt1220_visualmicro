@@ -1,4 +1,4 @@
-#include <ESPAsyncWebServer.h>
+ï»¿#include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include "FS.h"
 #include "LittleFS.h"
@@ -10,7 +10,7 @@
 //#include <WebServer.h>
 #include "time.h"
 #include <Arduino.h>
-#include <stdarg.h>  // Knihovna pro variabilní argumenty
+#include <stdarg.h>  // Knihovna pro variabilnÃ­ argumenty
 #include <stdio.h>   // Knihovna pro vsnprintf
 #include <LCDI2C_Multilingual.h>
 
@@ -23,7 +23,7 @@
 #include "freertos/task.h"
 #include <esp_task_wdt.h>
 
-///vypnutí pouití EEPROM a EspConfigLib
+///vypnutÃ­ pouÅ¾itÃ­ EEPROM a EspConfigLib
 //#include "uEEPROMLib.h"
 //#include "uEspConfigLib.h"
 
@@ -33,6 +33,9 @@
 #include <HTTPUpdate.h>
 
 #include <WiFiClientSecure.h>   // Needed for HTTPS
+
+#include "esp_system.h"
+#include "esp_mac.h"
 
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
@@ -44,12 +47,12 @@
 
 // Caution: It need to be a global variable or a global pointer.
 // if FS is a 'setup' variable it will lead to crashes
-///vypnutí pouití EEPROM a EspConfigLib
+///vypnutÃ­ pouÅ¾itÃ­ EEPROM a EspConfigLib
 //uEspConfigLibFSInterface* configFsC;
 //uEspConfigLib* config;
 
 // uEEPROMLib eeprom;
-///vypnutí pouití EEPROM a EspConfigLib
+///vypnutÃ­ pouÅ¾itÃ­ EEPROM a EspConfigLib
 //uEEPROMLib eeprom(0x50);
 
 static DS1307 rtc2;
@@ -62,7 +65,7 @@ AsyncWebServer server(80);
 
 //ESP32FTPClient ftpClient;
 
-// Inicializace sériovıch portù
+// Inicializace sÃ©riovÃ½ch portÅ¯
 HardwareSerial SerialC(1); // Pro SerialC
 HardwareSerial SerialD(2); // Pro SerialD
 
@@ -74,9 +77,9 @@ HardwareSerial SerialD(2); // Pro SerialD
 
 // commands of terminal
 #define C_ERROR_DATA     $00;  // nekorektni data
-#define C_ECHO           $01;  // Pošli odezvu        PC <-> TERMINAL
-#define C_SET_TIME       $02;  // Nastav èas          PC  -> TERMINAL
-#define C_GET_TIME       $03;  // Pošli èas           PC <-> TERMINAL
+#define C_ECHO           $01;  // PoÅ¡li odezvu        PC <-> TERMINAL
+#define C_SET_TIME       $02;  // Nastav Äas          PC  -> TERMINAL
+#define C_GET_TIME       $03;  // PoÅ¡li Äas           PC <-> TERMINAL
 #define C_DATA_WORKER    $04;  // Posilam zamestnance PC <-> TERMINAL
 
 #define PORT 		     54321
@@ -103,11 +106,11 @@ static int __attribute__((section(".noinit")))  key_maker = 0;      // 0 - jedna
 static long __attribute__((section(".noinit"))) timeout1;
 static long __attribute__((section(".noinit"))) timeout2;
 
-static int __attribute__((section(".noinit")))  rfid_reader_c;      // 0 - normalni èteèka
-static int __attribute__((section(".noinit")))  id12_c;             // 0 - normalni èteèka
+static int __attribute__((section(".noinit")))  rfid_reader_c;      // 0 - normalni ÄteÄka
+static int __attribute__((section(".noinit")))  id12_c;             // 0 - normalni ÄteÄka
 // 1 - rfid modul
-static int __attribute__((section(".noinit")))  rfid_reader_d;      // 0 - normalni èteèka
-static int __attribute__((section(".noinit")))  id12_d;             // 0 - normalni èteèka
+static int __attribute__((section(".noinit")))  rfid_reader_d;      // 0 - normalni ÄteÄka
+static int __attribute__((section(".noinit")))  id12_d;             // 0 - normalni ÄteÄka
 // 1 - rfid modul
 
 static long __attribute__((section(".noinit"))) timer1;		        // DISPLAY NAME timeout
@@ -149,7 +152,7 @@ static unsigned long  fifo_last = 0;
 static unsigned long  fifo_size = 0;
 
 const size_t MAX_BUFFER_FILE_SIZE = 128 * 1024; // 128 kB
-bool isSendingFileBuffer = false; // Globální flag pro signalizaci probíhajícího odesílání
+bool isSendingFileBuffer = false; // GlobÃ¡lnÃ­ flag pro signalizaci probÃ­hajÃ­cÃ­ho odesÃ­lÃ¡nÃ­
 
 static unsigned long physaddr;
 
@@ -163,7 +166,7 @@ static unsigned long SEC_TIMER;
 static bool eth_connected = false;
 static int  runCounter = 0;
 
-// Nastavení WiFi a TCP
+// NastavenÃ­ WiFi a TCP
 static char ssid[32] = "AGERIT_AC 2GHz";
 static char password[32] = "AGERITagerit512";
 //static char* ssid = "blackies";
@@ -171,6 +174,11 @@ static char password[32] = "AGERITagerit512";
 const char* serverIP = "192.168.88.221";
 //const char* serverIP = "192.168.225.221";
 const int serverPort = 54321;
+
+static char ap_ssid[32] = "APT1220_AP";   // fixnÃ­ ÄÃ¡st SSID
+static char ap_pass[64] = "12345678";     // heslo AP
+static bool ap_ssid_use_mac = true;           // true = pÅ™idÃ¡ MAC, false = pouÅ¾ije fixnÃ­ ap_ssid
+
 
 const bool vSerialDebug = true;
 const int  vLogLevel = 0;
@@ -187,14 +195,14 @@ static int efect = 0;
 // Add this global variable to track time for the asterisk movement
 static unsigned long lastEffectChange = 0;
 
-// Lokální verze firmware
+// LokÃ¡lnÃ­ verze firmware
 static String localVersion = "1.0.1.6";
 
 String newVersion = "";
 
-// URL k souboru, kde je uvedena aktuální verze firmware na serveru
+// URL k souboru, kde je uvedena aktuÃ¡lnÃ­ verze firmware na serveru
 const char* versionURL = "https://petrsramek.eu/emistr/apt1220/version.txt";
-// URL k novému firmware (binární soubor)
+// URL k novÃ©mu firmware (binÃ¡rnÃ­ soubor)
 const char* firmwareURL = "https://petrsramek.eu/emistr/apt1220/firmware.bin";
 
 const char* firmwareFTP = "update.emistr.cz";
@@ -202,15 +210,15 @@ const char* firmwareFTPPath = "/apt1220";
 const char* firmwareFTPUser = "emistrUpdate";
 const char* firmwareFTPPassword = "'X9SeQ$+#29d*b7#N'";
 
-// Globální promìnné pro OTA aktualizaci
+// GlobÃ¡lnÃ­ promÄ›nnÃ© pro OTA aktualizaci
 TaskHandle_t otaTaskHandle = NULL;
 bool otaInProgress = false;
 bool otaUpdateAvailable = false;
 
 Preferences preferences;
 
-static bool saveNewConfigData = false; // Flag pro uloení novıch dat do konfigurace
-static bool restartNetwork    = false; // Flag pro restartování sítì
+static bool saveNewConfigData = false; // Flag pro uloÅ¾enÃ­ novÃ½ch dat do konfigurace
+static bool restartNetwork    = false; // Flag pro restartovÃ¡nÃ­ sÃ­tÄ›
 
 byte customChar[] = {
   B00010,
@@ -237,16 +245,90 @@ char c_string2[16] = { 0 };
 
 static char g_last_tcp_command_code = 0;
 
-// Struktura pro pøenos dat z èteèek do fronty
+// Struktura pro pÅ™enos dat z ÄteÄek do fronty
 struct SerialData_t {
     char data[100]; // Buffer pro data
-    int port;       // Port, ze kterého data pøišla (1 pro C, 2 pro D)
+    int port;       // Port, ze kterÃ©ho data pÅ™iÅ¡la (1 pro C, 2 pro D)
 };
 
-// Handle pro frontu, která bude dret pøíchozí data
+// Handle pro frontu, kterÃ¡ bude drÅ¾et pÅ™Ã­chozÃ­ data
 QueueHandle_t serialDataQueue;
 
-SemaphoreHandle_t i2cMutex; // Mutex pro ochranu I2C sbìrnice (LCD a RTC)
+SemaphoreHandle_t i2cMutex; // Mutex pro ochranu I2C sbÄ›rnice (LCD a RTC)
+
+static bool apSettingsChanged = false;   // nastavÃ­Å¡ na true pÅ™i zmÄ›nÄ› SSID/hesla/flagu
+static bool pendingApRestart = false;   // nastavÃ­Å¡ na true, kdyÅ¾ je potÅ™eba restartovat AP
+
+static inline bool isApRunning() {
+    return (WiFi.getMode() & WIFI_MODE_AP) != 0;   // AP nebo AP+STA
+}
+
+void restartAPIfRunning() {
+    if (isApRunning()) {
+        WiFi.softAPdisconnect(true);  // zastavÃ­ AP (a odpojÃ­ klienty)
+        delay(200);
+        startAPMode();                // znovu spustÃ­ AP s novÃ½m SSID/heslem
+    }
+}
+
+
+// ===== Hostname & MAC helpers =====
+static String macToStr(const uint8_t mac[6], bool withDelims, char delim = '-') {
+    char buf[18];
+    if (withDelims) {
+        snprintf(buf, sizeof(buf), "%02X%c%02X%c%02X%c%02X%c%02X%c%02X",
+            mac[0], delim, mac[1], delim, mac[2], delim, mac[3], delim, mac[4], delim, mac[5]);
+    }
+    else {
+        snprintf(buf, sizeof(buf), "%02X%02X%02X%02X%02X%02X",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+    return String(buf);
+}
+
+static String readStaMacStr(bool delims = false) {
+    uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    return macToStr(mac, delims);
+}
+
+static String readApMacStr(bool delims = false) {
+    uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    return macToStr(mac, delims);
+}
+
+static String readEthMacStr(bool delims = false) {
+    uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_ETH);
+    return macToStr(mac, delims);
+}
+
+static String macNoDelims(String mac) {
+    mac.toUpperCase();
+    mac.replace(":", "");
+    mac.replace("-", "");
+    return mac;
+}
+
+static String makeHost(const char* prefix, const String& mac) {
+    return String(prefix) + macNoDelims(mac);
+}
+
+// Wi-Fi: nastav hostname z Wi-Fi STA MAC (volat PÅ˜ED WiFi.begin)
+static void setWiFiHostnameFromMac() {
+    String host = makeHost("APT1220-", WiFi.macAddress());
+    WiFi.setHostname(host.c_str());
+    // Pro zobrazenÃ­/logy si drÅ¾Ã­me i "aktivnÃ­ MAC" v hezkÃ©m formÃ¡tu
+    activeMAC = WiFi.macAddress();
+    activeMAC.replace(":", "-");
+}
+
+// Ethernet: nastav hostname z ETH MAC (ideÃ¡lnÄ› pÅ™i ETH_START/GOT_IP)
+static void setEthHostnameFromMac() {
+    String host = makeHost("APT1220E-", ETH.macAddress());
+    ETH.setHostname(host.c_str());
+    activeMAC = ETH.macAddress();
+    activeMAC.replace(":", "-");
+}
+
 
 void reset_buffer_file() {
     Serial.println("Create buffer file!");
@@ -264,26 +346,26 @@ void initializeHardware() {
 }
 
 void initializeFileSystem() {
-    // Pokusíme se pøipojit LittleFS, formátovat pokud sele
+    // PokusÃ­me se pÅ™ipojit LittleFS, formÃ¡tovat pokud selÅ¾e
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
         Serial.println("LittleFS Mount Failed initially.");
 
-        // --- Pøidáno: Explicitní pokus o formátování ---
+        // --- PÅ™idÃ¡no: ExplicitnÃ­ pokus o formÃ¡tovÃ¡nÃ­ ---
         Serial.println("Attempting to format LittleFS...");
         if (LittleFS.format()) {
             Serial.println("LittleFS formatted successfully.");
-            // Zkusíme pøipojit znovu po formátování
+            // ZkusÃ­me pÅ™ipojit znovu po formÃ¡tovÃ¡nÃ­
             if (!LittleFS.begin()) {
                 Serial.println("LittleFS Mount Failed even after format!");
-                return; // Ukonèíme, pokud ani po formátu nelze pøipojit
+                return; // UkonÄÃ­me, pokud ani po formÃ¡tu nelze pÅ™ipojit
             }
             Serial.println("LittleFS Mounted successfully after format.");
         }
         else {
             Serial.println("LittleFS format failed.");
-            return; // Ukonèíme, pokud formátování sele
+            return; // UkonÄÃ­me, pokud formÃ¡tovÃ¡nÃ­ selÅ¾e
         }
-        // --- Konec pøidaného kódu ---
+        // --- Konec pÅ™idanÃ©ho kÃ³du ---
 
     }
     else {
@@ -299,13 +381,13 @@ void initializeFileSystem() {
         Serial.print("Buffer file exists: ");
         Serial.println(bufferFilePath);
 
-        File bufferFile = LittleFS.open(bufferFilePath, FILE_READ); // Otevøeme soubor pro ètení
+        File bufferFile = LittleFS.open(bufferFilePath, FILE_READ); // OtevÅ™eme soubor pro ÄtenÃ­
         if (bufferFile) {
-            size_t fileSize = bufferFile.size(); // Získáme velikost souboru
+            size_t fileSize = bufferFile.size(); // ZÃ­skÃ¡me velikost souboru
             Serial.print(" -> Size: ");
             Serial.print(fileSize);
             Serial.println(" bytes");
-            bufferFile.close(); // Zavøeme soubor
+            bufferFile.close(); // ZavÅ™eme soubor
         }
         else {
             Serial.println(" -> Error: Failed to open buffer file to get size.");
@@ -334,6 +416,10 @@ void initializeNetwork() {
         if (ETH.begin()) {
             ethInitOk = true;
 
+            // Nastav hostname z ETH MAC co nejdÅ™Ã­ve pÅ™ed DHCP
+            String hostE = "APT1220E-" + readEthMacStr(false);
+            ETH.setHostname(hostE.c_str());
+
             if (!useDHCP) {
                 Serial.println("Configuring static IP for ETH...");
                 IPAddress local_IP, gateway, subnet, primaryDNS;
@@ -348,8 +434,8 @@ void initializeNetwork() {
                 }
             }
 
-            // Logování stavu po inicializaci
-            // Poèkáme chvilku, aby se stihly eventy zpracovat a DHCP priradit IP
+            // LogovÃ¡nÃ­ stavu po inicializaci
+            // PoÄkÃ¡me chvilku, aby se stihly eventy zpracovat a DHCP priradit IP
             delay(1000);
 
             Serial.println("ETH Interface Status:");
@@ -374,14 +460,14 @@ void initializeNetwork() {
         }
     }
 
-    // eth_connected se nastavuje globálnì v eventu ARDUINO_EVENT_ETH_GOT_IP
-    // Dáme mu chvilku, aby se to stihlo stát
+    // eth_connected se nastavuje globÃ¡lnÄ› v eventu ARDUINO_EVENT_ETH_GOT_IP
+    // DÃ¡me mu chvilku, aby se to stihlo stÃ¡t
     unsigned long startAttempt = millis();
     while (!eth_connected && useETH && (millis() - startAttempt < 5000)) {
-        delay(100); // Poèkáme a 5 sekund na event, e jsme dostali IP
+        delay(100); // PoÄkÃ¡me aÅ¾ 5 sekund na event, Å¾e jsme dostali IP
     }
 
-    // AP Mode spustíme jen pokud selhala WiFi i Ethernet
+    // AP Mode spustÃ­me jen pokud selhala WiFi i Ethernet
     if (!wifiConnected && !eth_connected) {
         Serial.println("No network connection, starting AP Mode.");
         startAPMode();
@@ -402,7 +488,7 @@ void initializeDisplay() {
     lcd2.init();
     lcd2.backlight();
     lcd2.createChar(0, customChar);
-    lcd2.setAutoNewLine(false); // Vypne automatické posouvání na novı øádek
+    lcd2.setAutoNewLine(false); // Vypne automatickÃ© posouvÃ¡nÃ­ na novÃ½ Å™Ã¡dek
     lcd2.clear();
     delay(200);
     lcd2.printf("       eMISTR       ");
@@ -426,10 +512,10 @@ void setup() {
 
     localVersion = "1.0.1.6";
 
-    // KROK 1: INICIALIZACE SYNCHRONIZAÈNÍCH PRIMITIV
-    // Zavoláme naši novou funkci hned na zaèátku. Tím zajistíme,
-    // e všechny mutexy a fronty budou pøipravené pro tasky,
-    // které se spustí pozdìji v setupu.
+    // KROK 1: INICIALIZACE SYNCHRONIZAÄŒNÃCH PRIMITIV
+    // ZavolÃ¡me naÅ¡i novou funkci hned na zaÄÃ¡tku. TÃ­m zajistÃ­me,
+    // Å¾e vÅ¡echny mutexy a fronty budou pÅ™ipravenÃ© pro tasky,
+    // kterÃ© se spustÃ­ pozdÄ›ji v setupu.
     initializeSyncPrimitives();
 
     rtc2.setHourMode(CLOCK_H24);
@@ -474,39 +560,39 @@ void setup() {
 
     timeout1 = 0;
     timer_reset = SEC_TIMER + 86400;
-    // Denní reset 
+    // DennÃ­ resetÂ 
 
-    // Vytvoøíme task pro zpracování pøíkazù z fronty
+    // VytvoÅ™Ã­me task pro zpracovÃ¡nÃ­ pÅ™Ã­kazÅ¯ z fronty
     xTaskCreatePinnedToCore(
         commandProcessorTask,   // Funkce tasku
-        "CommandProcessor",     // Jméno
+        "CommandProcessor",     // JmÃ©no
         4096,                   // Stack
         NULL,                   // Parametry
-        2,                      // Priorita (dáme jí vyšší ne ètecím taskùm)
+        2,                      // Priorita (dÃ¡me jÃ­ vyÅ¡Å¡Ã­ neÅ¾ ÄtecÃ­m taskÅ¯m)
         NULL,                   // Handle
-        1                       // Spustíme na jádøe 1
+        1                       // SpustÃ­me na jÃ¡dÅ™e 1
     );
 
-    // Vytvoøíme task pro ètení ze SerialC
+    // VytvoÅ™Ã­me task pro ÄtenÃ­ ze SerialC
     xTaskCreatePinnedToCore(
         serialReaderTask,       // Funkce tasku
-        "SerialC_Reader",       // Jméno
+        "SerialC_Reader",       // JmÃ©no
         4096,                   // Stack
-        (void*)&SerialC,        // Parametr - pøedáme ukazatel na SerialC
+        (void*)&SerialC,        // Parametr - pÅ™edÃ¡me ukazatel na SerialC
         1,                      // Priorita
         NULL,                   // Handle
-        1                       // Spustíme také na jádøe 1
+        1                       // SpustÃ­me takÃ© na jÃ¡dÅ™e 1
     );
 
-    // Vytvoøíme task pro ètení ze SerialD
+    // VytvoÅ™Ã­me task pro ÄtenÃ­ ze SerialD
     xTaskCreatePinnedToCore(
         serialReaderTask,       // Funkce tasku
-        "SerialD_Reader",       // Jméno
+        "SerialD_Reader",       // JmÃ©no
         4096,                   // Stack
-        (void*)&SerialD,        // Parametr - pøedáme ukazatel na SerialD
+        (void*)&SerialD,        // Parametr - pÅ™edÃ¡me ukazatel na SerialD
         1,                      // Priorita
         NULL,                   // Handle
-        1                       // Spustíme také na jádøe 1
+        1                       // SpustÃ­me takÃ© na jÃ¡dÅ™e 1
     );
 
 #ifdef DEBUG_MODE
@@ -520,98 +606,98 @@ void setup() {
 }
 
 /**
- * @brief Task pro ètení dat ze sériového portu.
- * Tato funkce bìí v nekoneèné smyèce a je pouitelná pro oba sériové porty.
+ * @brief Task pro ÄtenÃ­ dat ze sÃ©riovÃ©ho portu.
+ * Tato funkce bÄ›Å¾Ã­ v nekoneÄnÃ© smyÄce a je pouÅ¾itelnÃ¡ pro oba sÃ©riovÃ© porty.
  * Jako parametr dostane ukazatel na HardwareSerial objekt.
  */
 void serialReaderTask(void* parameter) {
     HardwareSerial* serialPort = (HardwareSerial*)parameter;
     int portNumber = (serialPort == &SerialC) ? 1 : 2;
-    SerialData_t receivedData; // Vytvoøíme si strukturu pro data
+    SerialData_t receivedData; // VytvoÅ™Ã­me si strukturu pro data
 
-    for (;;) { // Nekoneèná smyèka tasku
+    for (;;) { // NekoneÄnÃ¡ smyÄka tasku
         if (serialPort->available()) {
             size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
             if (len > 0) {
-                receivedData.data[len] = '\0'; // Ukonèíme øetìzec
+                receivedData.data[len] = '\0'; // UkonÄÃ­me Å™etÄ›zec
                 receivedData.port = portNumber;
 
-                // Pošleme data do fronty. Pokud je fronta plná, poèkáme max 100ms.
+                // PoÅ¡leme data do fronty. Pokud je fronta plnÃ¡, poÄkÃ¡me max 100ms.
                 if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
-                    Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
+                    Serial.printf("CHYBA: Fronta pro seriovÃ¡ data je plnÃ¡, data z portu %d zahozena!\n", portNumber);
                 }
             }
         }
-        // Dáme plánovaèi šanci, aby se mohl vìnovat jinım úlohám.
-        // Task se na 20ms uspí a neere zbyteènì CPU.
+        // DÃ¡me plÃ¡novaÄi Å¡anci, aby se mohl vÄ›novat jinÃ½m ÃºlohÃ¡m.
+        // Task se na 20ms uspÃ­ a neÅ¾ere zbyteÄnÄ› CPU.
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
 /**
- * @brief Task pro zpracování dat z fronty.
- * Èeká, a se ve frontì objeví data, a pak je zpracuje voláním funkce serial().
+ * @brief Task pro zpracovÃ¡nÃ­ dat z fronty.
+ * ÄŒekÃ¡, aÅ¾ se ve frontÄ› objevÃ­ data, a pak je zpracuje volÃ¡nÃ­m funkce serial().
  */
 void commandProcessorTask(void* parameter) {
     SerialData_t dataToProcess;
 
     for (;;) {
-        // Èekáme na data ve frontì. Task je blokován (neere CPU), dokud nìco nepøijde.
-        // portMAX_DELAY znamená, e bude èekat "vìènì".
+        // ÄŒekÃ¡me na data ve frontÄ›. Task je blokovÃ¡n (neÅ¾ere CPU), dokud nÄ›co nepÅ™ijde.
+        // portMAX_DELAY znamenÃ¡, Å¾e bude Äekat "vÄ›ÄnÄ›".
         if (xQueueReceive(serialDataQueue, &dataToProcess, portMAX_DELAY) == pdTRUE) {
-            // Máme nová data, zavoláme tvou pùvodní funkci pro zpracování
+            // MÃ¡me novÃ¡ data, zavolÃ¡me tvou pÅ¯vodnÃ­ funkci pro zpracovÃ¡nÃ­
             Serial.printf("Data z fronty (port %d): %s\n", dataToProcess.port, dataToProcess.data);
             serial(dataToProcess.data, dataToProcess.port);
         }
     }
 }
 
-// "Hloupá" verze - jen èistí displej, nestará se o mutex
+// "HloupÃ¡" verze - jen ÄistÃ­ displej, nestarÃ¡ se o mutex
 void _fast_clear_disp_unsafe() {
     lcd2.clear();
     lcd2.home();
 }
 
-// "Chytrá" verze - wrapper, kterı se stará o bezpeènost
+// "ChytrÃ¡" verze - wrapper, kterÃ½ se starÃ¡ o bezpeÄnost
 void fast_clear_disp() {
-    // Vezmeme klíè
+    // Vezmeme klÃ­Ä
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
 
-        _fast_clear_disp_unsafe(); // Zavoláme "hloupou" funkci
+        _fast_clear_disp_unsafe(); // ZavolÃ¡me "hloupou" funkci
 
-        // Vrátíme klíè
+        // VrÃ¡tÃ­me klÃ­Ä
         xSemaphoreGive(i2cMutex);
     }
 }
 
 void _blank_line_unsafe(int line) {
-    lcd2.setCursor(0, line);                       // Umístí kurzor na zaèátek øádku
-    lcd2.print("                    ");           // Vypíše prázdnı øetìzec o 20 mezerách
-    lcd2.setCursor(0, line);                       // Umístí kurzor zpìt na zaèátek øádku
+    lcd2.setCursor(0, line);                       // UmÃ­stÃ­ kurzor na zaÄÃ¡tek Å™Ã¡dku
+    lcd2.print("                    ");           // VypÃ­Å¡e prÃ¡zdnÃ½ Å™etÄ›zec o 20 mezerÃ¡ch
+    lcd2.setCursor(0, line);                       // UmÃ­stÃ­ kurzor zpÄ›t na zaÄÃ¡tek Å™Ã¡dku
 }
 
-// "Chytrá" verze - teï se stará o zamykání
+// "ChytrÃ¡" verze - teÄ se starÃ¡ o zamykÃ¡nÃ­
 void blank_line(int line) {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-        _blank_line_unsafe(line); // Volá hloupou verzi
+        _blank_line_unsafe(line); // VolÃ¡ hloupou verzi
         xSemaphoreGive(i2cMutex);
     }
 }
 
 /**
- * @brief Bezpeènì zapíše data do TCP klienta. Stará se o zamèení a odemèení.
- * @param data Ukazatel na data k odeslání.
- * @return true pokud se odeslání podaøilo, jinak false.
+ * @brief BezpeÄnÄ› zapÃ­Å¡e data do TCP klienta. StarÃ¡ se o zamÄenÃ­ a odemÄenÃ­.
+ * @param data Ukazatel na data k odeslÃ¡nÃ­.
+ * @return true pokud se odeslÃ¡nÃ­ podaÅ™ilo, jinak false.
  */
 bool tcp_print_safe(const char* data) {
     bool success = false;
-    // Poèkáme si na klíè (mutex)
+    // PoÄkÃ¡me si na klÃ­Ä (mutex)
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         if (client.connected()) {
             client.print(data);
             success = true;
         }
-        // Vrátíme klíè
+        // VrÃ¡tÃ­me klÃ­Ä
         xSemaphoreGive(tcpMutex);
     }
     else {
@@ -621,10 +707,10 @@ bool tcp_print_safe(const char* data) {
 }
 
 /**
- * @brief Bezpeènì se pøipojí k TCP serveru.
+ * @brief BezpeÄnÄ› se pÅ™ipojÃ­ k TCP serveru.
  */
 void connectToServer_safe() {
-    // Vezmeme si klíè
+    // Vezmeme si klÃ­Ä
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         Serial.println("Pokousim se pripojit k serveru...");
         if (client.connect(serverIP, serverPort)) {
@@ -637,7 +723,7 @@ void connectToServer_safe() {
             setNetOn(0, 13);
             Serial.println("Pripojeni k serveru selhalo.");
         }
-        // Vrátíme klíè
+        // VrÃ¡tÃ­me klÃ­Ä
         xSemaphoreGive(tcpMutex);
     }
     else {
@@ -646,7 +732,7 @@ void connectToServer_safe() {
 }
 
 boolean load_config() {
-    //naètení konfigurace z Preferences
+    //naÄtenÃ­ konfigurace z Preferences
     preferences.begin("my-app", true);
 
 	snprintf(ip_adr, sizeof(ip_adr), "%s", preferences.getString("ip_adr", "192.168.222.202").c_str());
@@ -673,6 +759,10 @@ boolean load_config() {
     snprintf(ssid, sizeof(ssid), "%s", preferences.getString("SSID_NAME", "AGERIT_AC 2GHz").c_str());
 	snprintf(password, sizeof(password), "%s", preferences.getString("SSID_PASS", "AGERITagerit512").c_str());
 
+    snprintf(ap_ssid, sizeof(ap_ssid), "%s", preferences.getString("AP_SSID", "APT1220_AP").c_str());
+    snprintf(ap_pass, sizeof(ap_pass), "%s", preferences.getString("AP_PASS", "12345678").c_str());
+    ap_ssid_use_mac = preferences.getBool("AP_USE_MAC", true);
+
     ping_timeout = 4;
     preferences.end();
     serverIP = ip_server;
@@ -681,7 +771,7 @@ boolean load_config() {
 }
 
 boolean save_config() {
-    //uloení konfigurace do Preferences
+    //uloÅ¾enÃ­ konfigurace do Preferences
     preferences.begin("my-app", false);
     preferences.putString("ip_adr", ip_adr);
     preferences.putString("ip_mask", ip_mask);
@@ -704,6 +794,10 @@ boolean save_config() {
 
     preferences.putString("SSID_NAME", ssid);
     preferences.putString("SSID_PASS", password);
+
+    preferences.putString("AP_SSID", ap_ssid);
+    preferences.putString("AP_PASS", ap_pass);
+    preferences.putBool("AP_USE_MAC", ap_ssid_use_mac);
 
     preferences.end();
     return true;
@@ -731,6 +825,10 @@ void set_default() {
 
     loaded_default = 1;
 
+    snprintf(ap_ssid, sizeof(ap_ssid), "APT1220_AP");
+    snprintf(ap_pass, sizeof(ap_pass), "12345678");
+    ap_ssid_use_mac = true;
+
     saveNewConfigData = true;
 }
 
@@ -742,42 +840,42 @@ void init_lcd() {
 }
 
 void menu_dump() {
-    char long_str[20];  // Vyrovnávací pamì pro pøevedená èísla
+    char long_str[20];  // VyrovnÃ¡vacÃ­ pamÄ›Å¥ pro pÅ™evedenÃ¡ ÄÃ­sla
             
-    lockI2C();  // Zámek I2C sbìrnice pro bezpeènı pøístup k LCD
-	_fast_clear_disp_unsafe(); // Vyèištìní displeje
+    lockI2C();  // ZÃ¡mek I2C sbÄ›rnice pro bezpeÄnÃ½ pÅ™Ã­stup k LCD
+	_fast_clear_disp_unsafe(); // VyÄiÅ¡tÄ›nÃ­ displeje
 
-    // Zobrazení hodnoty fifo_start
+    // ZobrazenÃ­ hodnoty fifo_start
     lcd2.setCursor(0, 0);
     lcd2.printf("START:");
-    ltoa(fifo_start, long_str, 10);  // Pøevede `fifo_start` na øetìzec
+    ltoa(fifo_start, long_str, 10);  // PÅ™evede `fifo_start` na Å™etÄ›zec
     lcd2.printf(long_str);
 
-    // Zobrazení hodnoty fifo_end
+    // ZobrazenÃ­ hodnoty fifo_end
     lcd2.setCursor(0, 1);
     lcd2.printf("END:");
     ltoa(fifo_end, long_str, 10);
     lcd2.printf(long_str);
 
-    // Zobrazení hodnoty fifo_first
+    // ZobrazenÃ­ hodnoty fifo_first
     lcd2.setCursor(0, 2);
     lcd2.printf("FIRST:");
     ltoa(fifo_first, long_str, 10);
     lcd2.printf(long_str);
 
-    // Zobrazení hodnoty fifo_last
+    // ZobrazenÃ­ hodnoty fifo_last
     lcd2.setCursor(0, 3);
     lcd2.printf("LAST:");
     ltoa(fifo_last, long_str, 10);
     lcd2.printf(long_str);
-	unlockI2C();  // Uvolnìní I2C zámku
+	unlockI2C();  // UvolnÄ›nÃ­ I2C zÃ¡mku
 }
 
 void menuconfig() {
 
-    lockI2C();  // Zámek I2C sbìrnice pro bezpeènı pøístup k LCD
+    lockI2C();  // ZÃ¡mek I2C sbÄ›rnice pro bezpeÄnÃ½ pÅ™Ã­stup k LCD
     long timeout_up;
-	_fast_clear_disp_unsafe(); // Vyèištìní displeje
+	_fast_clear_disp_unsafe(); // VyÄiÅ¡tÄ›nÃ­ displeje
     lcd2.setCursor(0, 0);
     lcd2.printf("IP:");
     //lcd2.printf(ip_adr);
@@ -787,7 +885,7 @@ void menuconfig() {
         if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
         else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
         lcd2.printf(ip_adr2);
-		//delete ip_adr2; // Uvolnìní pamìti, pokud bylo pouito dynamické alokování
+		//delete ip_adr2; // UvolnÄ›nÃ­ pamÄ›ti, pokud bylo pouÅ¾ito dynamickÃ© alokovÃ¡nÃ­
     }
     else {
         lcd2.printf(ip_adr);
@@ -803,13 +901,13 @@ void menuconfig() {
     lcd2.printf("VERZE: ");
     //lcd2.printf(" %s  ", VERZE_PRACANT);
     lcd2.printf(" %s  ", localVersion);
-	unlockI2C();  // Uvolnìní I2C zámku
+	unlockI2C();  // UvolnÄ›nÃ­ I2C zÃ¡mku
 }
 
 void menuconfigwifi() {
-    lockI2C();  // Zámek I2C sbìrnice pro bezpeènı pøístup k LCD
+    lockI2C();  // ZÃ¡mek I2C sbÄ›rnice pro bezpeÄnÃ½ pÅ™Ã­stup k LCD
     long timeout_up;
-	_fast_clear_disp_unsafe(); // Vyèištìní displeje
+	_fast_clear_disp_unsafe(); // VyÄiÅ¡tÄ›nÃ­ displeje
 
     lcd2.setCursor(0, 0);
     lcd2.printf("SSID:");
@@ -818,28 +916,28 @@ void menuconfigwifi() {
     lcd2.printf("VERZE: ");
     //lcd2.printf(" %s  ", VERZE_PRACANT);
     lcd2.printf(" %s  ", localVersion);
-	unlockI2C();  // Uvolnìní I2C zámku
+	unlockI2C();  // UvolnÄ›nÃ­ I2C zÃ¡mku
 }
 
 void resetConfig() {
-    // Zavøete existující TCP pøipojení
+    // ZavÅ™ete existujÃ­cÃ­ TCP pÅ™ipojenÃ­
     if (client.connected()) {
         client.stop();
         Serial.println("TCP client disconnected");
     }
 
-    // Restart WiFi pøipojení
-    WiFi.disconnect(true); // Odpojí a zapomene pøipojení
-    delay(1000);           // Poèkejte na odpojení
+    // Restart WiFi pÅ™ipojenÃ­
+    WiFi.disconnect(true); // OdpojÃ­ a zapomene pÅ™ipojenÃ­
+    delay(1000);           // PoÄkejte na odpojenÃ­
 
-    // Nastavení statické IP (pokud je poadována statická IP)
+    // NastavenÃ­ statickÃ© IP (pokud je poÅ¾adovÃ¡na statickÃ¡ IP)
     if (!WiFi.config(IPAddress(ip_adr), IPAddress(ip_gate), IPAddress(ip_mask))) {
         Serial.println("STA Failed to configure");
     }
 
     Serial.println(useWifi ? "WIFI connect" : "ETH connect");
 
-    // Pøipojte se znovu k WiFi síti
+    // PÅ™ipojte se znovu k WiFi sÃ­ti
     if (useWifi) {
         connectToWiFi();
     }
@@ -850,30 +948,30 @@ void resetConfig() {
         ETH.begin();
     }
 
-    // Inicializace FIFO promìnnıch
+    // Inicializace FIFO promÄ›nnÃ½ch
       //fifo_start = malloc(ALOC_MEM);
       //fifo_end =fifo_start+ALOC_MEM;
 
     fifo_first = fifo_start;
     fifo_last = fifo_start;
 
-    // Ovìøení a nastavení èasovaèù
+    // OvÄ›Å™enÃ­ a nastavenÃ­ ÄasovaÄÅ¯
     if (timer1 > 60 || timer1 < 1) timer1 = 10;
     if (timer2 > 60 || timer2 < 1) timer2 = 5;
 
-    // Otevøete nové TCP pøipojení
+    // OtevÅ™ete novÃ© TCP pÅ™ipojenÃ­
     connectToServer_safe();
 	Serial.println("TCP client reinitialized");
 }
 
 void reader_input(const char* display_str, char* data_to_fill) {
-    char new_data[16] = "";  // Buffer pro nová data
-    char buffer2[100];       // Buffer pro sériovı vstup
+    char new_data[16] = "";  // Buffer pro novÃ¡ data
+    char buffer2[100];       // Buffer pro sÃ©riovÃ½ vstup
 
     // TOTO JE TEN TRIK:
-    // Nastavíme timeout pro pøekreslení hlavní obrazovky na dalekou budoucnost (tøeba hodinu).
-    // Tím zajistíme, e zatímco my tady èekáme na vstup, funkce loop() nezavolá tDEMOscreen()
-    // a nepokusí se nám sáhnout na I2C sbìrnici.
+    // NastavÃ­me timeout pro pÅ™ekreslenÃ­ hlavnÃ­ obrazovky na dalekou budoucnost (tÅ™eba hodinu).
+    // TÃ­m zajistÃ­me, Å¾e zatÃ­mco my tady ÄekÃ¡me na vstup, funkce loop() nezavolÃ¡ tDEMOscreen()
+    // a nepokusÃ­ se nÃ¡m sÃ¡hnout na I2C sbÄ›rnici.
     timeout1 = SEC_TIMER + 3600;
 
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
@@ -939,36 +1037,36 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 input_processed = true;
             }
 
-            // Pøekreslíme zadanı text jen pokud pøišlo nìco nového
+            // PÅ™ekreslÃ­me zadanÃ½ text jen pokud pÅ™iÅ¡lo nÄ›co novÃ©ho
             if (input_processed) {
                 lcd2.setCursor(4, 2);
-                lcd2.print("                "); // Vymaeme starı text
+                lcd2.print("                "); // VymaÅ¾eme starÃ½ text
                 lcd2.setCursor(4, 2);
                 lcd2.print(new_data);
             }
 
-            // Dáme šanci ostatním taskùm, ale ne moc velkou, a je odezva sviná.
+            // DÃ¡me Å¡anci ostatnÃ­m taskÅ¯m, ale ne moc velkou, aÅ¥ je odezva sviÅ¾nÃ¡.
             vTaskDelay(pdMS_TO_TICKS(20));
         }
-        // Na konci vrátíme mutex, tak jak to bylo v pùvodní funkèní verzi.
+        // Na konci vrÃ¡tÃ­me mutex, tak jak to bylo v pÅ¯vodnÃ­ funkÄnÃ­ verzi.
         xSemaphoreGive(i2cMutex);
     }
     else {
         Serial.println("Chyba: reader_input nemohl ziskat I2C mutex!");
     }
 
-    // Po opuštìní funkce nastavíme timeout na nulu, abychom vynutili
-    // okamité pøekreslení hlavní obrazovky s pøípadnımi novımi daty.
+    // Po opuÅ¡tÄ›nÃ­ funkce nastavÃ­me timeout na nulu, abychom vynutili
+    // okamÅ¾itÃ© pÅ™ekreslenÃ­ hlavnÃ­ obrazovky s pÅ™Ã­padnÃ½mi novÃ½mi daty.
     timeout1 = 0;
 }
 
 /*
 
 void reader_input(const char* display_str, char* data_to_fill) {
-    char new_data[16] = "";  // Buffer pro nová data
-    String buffer2;          // Pomocnı buffer pro sériovı vstup
+    char new_data[16] = "";  // Buffer pro novÃ¡ data
+    String buffer2;          // PomocnÃ½ buffer pro sÃ©riovÃ½ vstup
 
-    fast_clear_disp();       // Vymazání LCD displeje
+    fast_clear_disp();       // VymazÃ¡nÃ­ LCD displeje
 
     delay(10);
 
@@ -985,20 +1083,20 @@ void reader_input(const char* display_str, char* data_to_fill) {
     while (true) {
         if (SerialC.available() > 0) {
             //if (Serial.available() > 0) {
-                //buffer2 = Serial.readStringUntil('\n');  // Ètení vstupu do bufferu do znaku nového øádku
-            buffer2 = SerialC.readStringUntil('\n');  // Ètení vstupu do bufferu do znaku nového øádku
+                //buffer2 = Serial.readStringUntil('\n');  // ÄŒtenÃ­ vstupu do bufferu do znaku novÃ©ho Å™Ã¡dku
+            buffer2 = SerialC.readStringUntil('\n');  // ÄŒtenÃ­ vstupu do bufferu do znaku novÃ©ho Å™Ã¡dku
 
-            buffer2.trim();  // Odstranìní bílıch znakù
+            buffer2.trim();  // OdstranÄ›nÃ­ bÃ­lÃ½ch znakÅ¯
 
             if (buffer2.equals("STORNO")) {
-                break;  // Pøerušení pøi pøíkazu "STORNO"
+                break;  // PÅ™eruÅ¡enÃ­ pÅ™i pÅ™Ã­kazu "STORNO"
             }
             else if (buffer2.equals("OK")) {
-                strncpy(data_to_fill, new_data, sizeof(new_data));  // Uloení novıch dat
+                strncpy(data_to_fill, new_data, sizeof(new_data));  // UloÅ¾enÃ­ novÃ½ch dat
                 break;
             }
             else if (buffer2.equals("DEFAULT")) {
-                // Odstranìní posledního znaku
+                // OdstranÄ›nÃ­ poslednÃ­ho znaku
                 if (strlen(new_data) > 0) {
                     new_data[strlen(new_data) - 1] = '\0';
                     lcd2.setCursor(strlen(new_data) + 4, 2);
@@ -1007,7 +1105,7 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 }
             }
             else {
-                // Pøidání vstupu do `new_data` a zobrazení na LCD
+                // PÅ™idÃ¡nÃ­ vstupu do `new_data` a zobrazenÃ­ na LCD
                 strncat(new_data, buffer2.c_str(), sizeof(new_data) - strlen(new_data) - 1);
                 lcd2.printf("%s", buffer2.c_str());
             }
@@ -1024,19 +1122,19 @@ void serial(char* buffer2, int port) {
     int counter1;
     char tmp2[100] = { 0 };
 
-    char first_char_code[2] = { 0 }; // Pomocnı buffer pro první znak
+    char first_char_code[2] = { 0 }; // PomocnÃ½ buffer pro prvnÃ­ znak
 
     /*
         char buffer2_copy[100];
         strncpy(buffer2_copy, buffer2, sizeof(buffer2_copy) - 1);
-        buffer2_copy[sizeof(buffer2_copy) - 1] = '\0';  // Zajištìní null-terminace
+        buffer2_copy[sizeof(buffer2_copy) - 1] = '\0';  // ZajiÅ¡tÄ›nÃ­ null-terminace
 
-        // Nyní pracujte s `buffer2_copy` místo `buffer2`
+        // NynÃ­ pracujte s `buffer2_copy` mÃ­sto `buffer2`
         if (buffer2_copy[strlen(buffer2_copy) - 1] == '\n') {
             buffer2_copy[strlen(buffer2_copy) - 1] = '\0';
         }
     */
-    // Odstranìní koncovıch znakù `\n`
+    // OdstranÄ›nÃ­ koncovÃ½ch znakÅ¯ `\n`
     if (buffer2[strlen(buffer2) - 1] == '\n') {
         buffer2[strlen(buffer2) - 1] = '\0';
     }
@@ -1048,7 +1146,7 @@ void serial(char* buffer2, int port) {
 
     if ((millis() / 1000) >= timeout1) { _fast_clear_disp_unsafe(); }
 
-    // Zpracování rùznıch pøíkazù
+    // ZpracovÃ¡nÃ­ rÅ¯znÃ½ch pÅ™Ã­kazÅ¯
     //if (strcmp(buffer2String, "SET-IP") == 0) {
     if (buffer2String.equals("SET-IP")) {
         if (useDHCP) {
@@ -1057,14 +1155,14 @@ void serial(char* buffer2, int port) {
             else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
           reader_input("Nastaveni IP DHCP", ip_adr2);
 		  strcpy(ip_adr, ip_adr2);
-		  restartNetwork = true; // Nastavíme flag pro restart sítì
+		  restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
           //snprintf(buffer, sizeof(buffer), "IP: %s\n", ip_adr2);
           //Serial.print(buffer);
 		  //lcd2.printf("IP: %s\n", ip_adr2);
         }
         else {
           reader_input("Nastaveni IP", ip_adr);
-          restartNetwork = true; // Nastavíme flag pro restart sítì
+          restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
 		}
         
 		Serial.printf("IP: %s\n", ip_adr);
@@ -1084,12 +1182,12 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-GATE")) {
         reader_input("Nastaveni BRANY", ip_gate);
-        restartNetwork = true; // Nastavíme flag pro restart sítì
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
         //} else if (strcmp(buffer2, "SET-MASK") == 0) {
     }
     else if (buffer2String.equals("SET-MASK")) {
         reader_input("Nastaveni Masky", ip_mask);
-        restartNetwork = true; // Nastavíme flag pro restart sítì
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
         //} else if (strcmp(buffer2, "FILL") == 0) {
     }
     else if (buffer2String.equals("FILL")) {
@@ -1187,12 +1285,12 @@ void serial(char* buffer2, int port) {
     else if (buffer2String.equals("SET-DHCP")) {
         useDHCP = true;
         saveNewConfigData = true;
-        restartNetwork = true; // Nastavíme flag pro restart sítì
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
     }
     else if (buffer2String.equals("SET-STATIC")) {
         useDHCP = false;
         saveNewConfigData = true;
-        restartNetwork = true; // Nastavíme flag pro restart sítì
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
         }
     else if (buffer2String.equals("SET-WIFI")) {
         useWifi = true;
@@ -1203,16 +1301,40 @@ void serial(char* buffer2, int port) {
         useWifi = false;
         useETH = true;
         saveNewConfigData = true;
-        restartNetwork = true; // Nastavíme flag pro restart sítì
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
     }
     else if (buffer2String.equals("SET-SSID")) {
         //SSID
-        reader_input("Nastavení SSID", ssid);
+        reader_input("NastavenÃ­ SSID", ssid);
+        saveNewConfigData = true;
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
     }
     else if (buffer2String.equals("SET-PASSW")) {
         //SSID PASSWORD 
-        reader_input("Nastavení hesla", password);
+        reader_input("NastavenÃ­ hesla", password);
+        saveNewConfigData = true;
+        restartNetwork = true; // NastavÃ­me flag pro restart sÃ­tÄ›
     }
+    else if (buffer2String.equals("SET-APSSID")) {
+        reader_input("AP SSID", ap_ssid);
+        saveNewConfigData = true;
+        apSettingsChanged = true; // NastavÃ­me flag pro restart sÃ­tÄ›
+        }
+    else if (buffer2String.equals("SET-APPASS")) {
+            reader_input("AP HESLO", ap_pass);
+            saveNewConfigData = true;
+            apSettingsChanged = true; // NastavÃ­me flag pro restart sÃ­tÄ›
+            }
+    else if (buffer2String.equals("SET-AP-FIX")) {
+                ap_ssid_use_mac = false;
+                saveNewConfigData = true;
+                apSettingsChanged = true; // NastavÃ­me flag pro restart sÃ­tÄ›
+                }
+    else if (buffer2String.equals("SET-AP-MAC")) {
+                    ap_ssid_use_mac = true;
+                    saveNewConfigData = true;
+                    apSettingsChanged = true; // NastavÃ­me flag pro restart sÃ­tÄ›
+                    }
     else if (buffer2String.equals("SHOW-NET")) {
         menuconfig();
         timeout1 = SEC_TIMER + timer2;
@@ -1238,43 +1360,43 @@ void serial(char* buffer2, int port) {
         }
 
         char prefix = buffer2[0];
-        const char* code_body = buffer2 + 1; // Zbytek øetìzce za prefixem
+        const char* code_body = buffer2 + 1; // Zbytek Å™etÄ›zce za prefixem
 
-        // Nová logika pro zobrazení na displeji v OFFLINE reimu
+        // NovÃ¡ logika pro zobrazenÃ­ na displeji v OFFLINE reÅ¾imu
         if (!net_on) {
             switch (prefix) {
             case 'A': // Operace
                 display_line_formated(buffer2String.c_str(), 0);
                 break;
-            case 'B': // Zakázka
+            case 'B': // ZakÃ¡zka
                 display_line_formated(buffer2String.c_str(), 1);
                 break;
-            case 'D': // Pracovník
+            case 'D': // PracovnÃ­k
                 display_line_formated(buffer2String.c_str(), 3);
                 break;
-            case 'G': // Pracovník
+            case 'G': // PracovnÃ­k
                 display_line_formated(buffer2String.c_str(), 0);
                 break;
-            case 'H': // Mnoství
+            case 'H': // MnoÅ¾stvÃ­
                 display_line_formated(buffer2String.c_str(), 2);
                 break;
-                // Mùeme pøidat další, pokud je potøeba
+                // MÅ¯Å¾eme pÅ™idat dalÅ¡Ã­, pokud je potÅ™eba
             default:
-                // Neznámı kód zobrazíme na posledním øádku jako døíve
+                // NeznÃ¡mÃ½ kÃ³d zobrazÃ­me na poslednÃ­m Å™Ã¡dku jako dÅ™Ã­ve
                 display_line_formated(buffer2, 3);
                 break;
             }
         }
 
-        // Zpracování na základì prvního znaku
+        // ZpracovÃ¡nÃ­ na zÃ¡kladÄ› prvnÃ­ho znaku
         switch (buffer2[0]) {
         case 'A':
             //strcpy(tmp, "\x06");
-			first_char_code[0] = '\x06'; // Uloení prvního znaku
+			first_char_code[0] = '\x06'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'B':
             //strcpy(tmp, "\x05");
-			first_char_code[0] = '\x05'; // Uloení prvního znaku
+			first_char_code[0] = '\x05'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'D':
             if (key_maker == 1) {
@@ -1285,39 +1407,39 @@ void serial(char* buffer2, int port) {
             break;
         case 'E':
             //strcpy(tmp, "\x08");
-			first_char_code[0] = '\x08'; // Uloení prvního znaku
+			first_char_code[0] = '\x08'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'F':
             //strcpy(tmp, "\x07");
-			first_char_code[0] = '\x07'; // Uloení prvního znaku
+			first_char_code[0] = '\x07'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'G':
             //strcpy(tmp, "\x10");
-			first_char_code[0] = '\x10'; // Uloení prvního znaku
+			first_char_code[0] = '\x10'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'H':
             //strcpy(tmp, "\x11");
-			first_char_code[0] = '\x11'; // Uloení prvního znaku
+			first_char_code[0] = '\x11'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'I':
             //strcpy(tmp, "\x12");
-			first_char_code[0] = '\x12'; // Uloení prvního znaku
+			first_char_code[0] = '\x12'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'J':
             //strcpy(tmp, "\x13");
-			first_char_code[0] = '\x13'; // Uloení prvního znaku
+			first_char_code[0] = '\x13'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'K':
             //strcpy(tmp, "\x19");
-			first_char_code[0] = '\x19'; // Uloení prvního znaku
+			first_char_code[0] = '\x19'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         case 'L':
             //strcpy(tmp, "\x20");
-			first_char_code[0] = '\x20'; // Uloení prvního znaku
+			first_char_code[0] = '\x20'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         default:
             //strcpy(tmp, "\x17");
-			first_char_code[0] = '\x17'; // Uloení prvního znaku
+			first_char_code[0] = '\x17'; // UloÅ¾enÃ­ prvnÃ­ho znaku
             break;
         }
 
@@ -1325,7 +1447,7 @@ void serial(char* buffer2, int port) {
 
         //strcat(tmp, buffer2String.c_str());
 
-        // Echo na LCD pøi offline stavu
+        // Echo na LCD pÅ™i offline stavu
         if (!net_on && ((long)(fifo_end - fifo_last) >= off_buffer_size)) {
             /*
             blank_line(2);
@@ -1333,12 +1455,12 @@ void serial(char* buffer2, int port) {
             lcd2.printf("%s", buffer2String.c_str());
             */
 			
-			// Zobrazíme zprávu na LCD
-			// ji není potøeba, protoe pouíváme display_line_formated podle prefixu 
+			// ZobrazÃ­me zprÃ¡vu na LCD
+			// jiÅ¾ nenÃ­ potÅ™eba, protoÅ¾e pouÅ¾Ã­vÃ¡me display_line_formated podle prefixu 
             //display_line_formated(buffer2String.c_str(), 2);
         }
 
-        // Pøidání èasu k pøíkazùm typu D, E, J atd.
+        // PÅ™idÃ¡nÃ­ Äasu k pÅ™Ã­kazÅ¯m typu D, E, J atd.
         /*
         if (strchr("DEJ0123456789", buffer2[0])) {
             strcat(tmp, "~");
@@ -1347,9 +1469,9 @@ void serial(char* buffer2, int port) {
             strcat(tmp, buffer);
         }
         */
-		// Pøidání èasu k pøíkazùm typu D, E, J atd.
+		// PÅ™idÃ¡nÃ­ Äasu k pÅ™Ã­kazÅ¯m typu D, E, J atd.
         if (strchr("DEJ0123456789", buffer2[0])) {
-            get_time(buffer, sizeof(buffer)); // buffer je pomocné pole, kam se uloí èas
+            get_time(buffer, sizeof(buffer)); // buffer je pomocnÃ© pole, kam se uloÅ¾Ã­ Äas
             snprintf(tmp, sizeof(tmp), "%s%s~%s\n", first_char_code, buffer2String.c_str(), buffer);
         }
         else {
@@ -1360,13 +1482,13 @@ void serial(char* buffer2, int port) {
         
         if (net_on) {
             //client.print(tmp);
-			tcp_print_safe(tmp); // Pouití bezpeèné funkce pro komunikaci pøes TCP
+			tcp_print_safe(tmp); // PouÅ¾itÃ­ bezpeÄnÃ© funkce pro komunikaci pÅ™es TCP
         }
         else {
             //strcat(off_buffer, tmp);
-            // --- Kontrola velikosti PØED strcat (z minulé úpravy) ---
+            // --- Kontrola velikosti PÅ˜ED strcat (z minulÃ© Ãºpravy) ---
             if (strlen(off_buffer) + strlen(tmp) < sizeof(off_buffer)) {
-                strcat(off_buffer, tmp); // Pøidat do off_buffer, jen pokud se vejde
+                strcat(off_buffer, tmp); // PÅ™idat do off_buffer, jen pokud se vejde
             }
             else {
                 Serial.println("CHYBA: off_buffer je plny, nelze pripojit zpravu:");
@@ -1386,53 +1508,53 @@ void serial(char* buffer2, int port) {
 
                 //fifo_last += strlen(off_buffer) + 1;
 
-                // --- Pøidána kontrola velikosti souboru PØED zápisem ---
+                // --- PÅ™idÃ¡na kontrola velikosti souboru PÅ˜ED zÃ¡pisem ---
                 bool can_write_to_file = false;
                 size_t current_file_size = 0;
-                size_t data_to_add_size = strlen(off_buffer); // Velikost dat, která chceme pøidat
+                size_t data_to_add_size = strlen(off_buffer); // Velikost dat, kterÃ¡ chceme pÅ™idat
 
-                if (data_to_add_size > 0) { // Kontrolujeme jen pokud máme co zapisovat
-                    File bufferFileRead = LittleFS.open(bufferFilePath, FILE_READ); // Otevøít jen pro ètení velikosti
+                if (data_to_add_size > 0) { // Kontrolujeme jen pokud mÃ¡me co zapisovat
+                    File bufferFileRead = LittleFS.open(bufferFilePath, FILE_READ); // OtevÅ™Ã­t jen pro ÄtenÃ­ velikosti
                     if (bufferFileRead) {
                         current_file_size = bufferFileRead.size();
-                        bufferFileRead.close(); // Hned zavøít
+                        bufferFileRead.close(); // Hned zavÅ™Ã­t
 
-                        // Zkontrolujeme, zda se nová data vejdou pod limit
+                        // Zkontrolujeme, zda se novÃ¡ data vejdou pod limit
                         if (current_file_size + data_to_add_size < MAX_BUFFER_FILE_SIZE) {
                             can_write_to_file = true;
                         }
                         else {
-                            // Pokud by pøidání dat pøekroèilo limit
+                            // Pokud by pÅ™idÃ¡nÃ­ dat pÅ™ekroÄilo limit
                             Serial.printf("CHYBA: Soubor bufferu %s je plny (%u B). Nelze pridat %u B.\n",
                                 bufferFilePath, (unsigned int)current_file_size, (unsigned int)data_to_add_size);
 
-                            // Volitelnì: Zobrazit chybu i na LCD
+                            // VolitelnÄ›: Zobrazit chybu i na LCD
                             /*
-                            blank_line(0); // Vymaeme øádek 0
+                            blank_line(0); // VymaÅ¾eme Å™Ã¡dek 0
                             lcd2.setCursor(0, 0);
                             lcd2.print("CHYBA:SOUBOR PLNY!");
                             */
 
 							display_line_formated("CHYBA: SOUBOR PLNY!", 0);
-                            timeout1 = SEC_TIMER + timer2; // Necháme zprávu viditelnou
+                            timeout1 = SEC_TIMER + timer2; // NechÃ¡me zprÃ¡vu viditelnou
                         }
                     }
                     else {
                         Serial.printf("CHYBA: Nelze otevrit soubor %s pro kontrolu velikosti.\n", bufferFilePath);
-                        // Pokud nelze zjistit velikost, radìji nezapisujeme
+                        // Pokud nelze zjistit velikost, radÄ›ji nezapisujeme
                         can_write_to_file = false;
                     }
                 }
                 else {
-                    // Není co zapisovat (off_buffer je prázdnı)
+                    // NenÃ­ co zapisovat (off_buffer je prÃ¡zdnÃ½)
                     Serial.println("DEBUG: off_buffer je prazdny, neni co zapisovat do souboru.");
-                    can_write_to_file = false; // Není potøeba volat appendFile
+                    can_write_to_file = false; // NenÃ­ potÅ™eba volat appendFile
                 }
                 // --- Konec kontroly velikosti souboru ---
 
-                // --- Zápis do souboru POUZE pokud kontrola prošla ---
+                // --- ZÃ¡pis do souboru POUZE pokud kontrola proÅ¡la ---
                 if (can_write_to_file) {
-                    appendFile(LittleFS, bufferFilePath, off_buffer); // Pøidá celı obsah off_buffer na konec souboru
+                    appendFile(LittleFS, bufferFilePath, off_buffer); // PÅ™idÃ¡ celÃ½ obsah off_buffer na konec souboru
 
                     // Zobrazit "ULOZENO DO SOUBORU" na LCD
                     lcd2.setCursor(0, 0);
@@ -1440,7 +1562,7 @@ void serial(char* buffer2, int port) {
                     lcd2.setCursor(0, 1);
                     lcd2.printf("|     ULOZENO      |");
                     lcd2.setCursor(0, 2);
-                    lcd2.printf("|   DO SOUBORU     |"); // Opravenı text
+                    lcd2.printf("|   DO SOUBORU     |"); // OpravenÃ½ text
                     lcd2.setCursor(0, 3);
                     lcd2.printf("*------------------*");
                     saved = 1;
@@ -1448,38 +1570,43 @@ void serial(char* buffer2, int port) {
 
                     memset(off_buffer, 0x00, sizeof(off_buffer));
                 }
-                // --- Konec zápisu do souboru ---
+                // --- Konec zÃ¡pisu do souboru ---
             }
         }
     }
 
     if (saveNewConfigData) {
-        save_config(); // Uloení novıch dat do konfigurace
-        saveNewConfigData = false; // Reset flagu po uloení
+        save_config(); // UloÅ¾enÃ­ novÃ½ch dat do konfigurace
+        saveNewConfigData = false; // Reset flagu po uloÅ¾enÃ­
+
+        if (apSettingsChanged) {
+            restartAPIfRunning();   // â† tady pÅ™esnÄ› pÅ™ijde ta trojice: softAPdisconnect + delay + startAPMode
+            apSettingsChanged = false;
+        }
 	}
 
     if (restartNetwork) {
-		//ESP.restart(); // Restart ESP32 pro aplikaci zmìn sítì
+		//ESP.restart(); // Restart ESP32 pro aplikaci zmÄ›n sÃ­tÄ›
 		/*
-        blank_line(3); // Vymaeme øádek 3
+        blank_line(3); // VymaÅ¾eme Å™Ã¡dek 3
 		lcd2.printf("RESTART SITE...");
         */
 
 		display_line_unformated("RESTART SITE...", 3);
 
-		initializeNetwork(); // Volání funkce pro inicializaci sítì
-		restartNetwork = false; // Reset flagu po restartu sítì
+		initializeNetwork(); // VolÃ¡nÃ­ funkce pro inicializaci sÃ­tÄ›
+		restartNetwork = false; // Reset flagu po restartu sÃ­tÄ›
     }
 
 }
 
 void tDEMOscreen() {
 
-    // Zkusíme si vzít klíè (mutex). Pokud je obsazenı, task tady poèká.
+    // ZkusÃ­me si vzÃ­t klÃ­Ä (mutex). Pokud je obsazenÃ½, task tady poÄkÃ¡.
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
     char buffer2[100] = { 0 };
 
-    // Zobrazení informací na LCD
+    // ZobrazenÃ­ informacÃ­ na LCD
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         //lcd2.printf("   eMISTR ESP32    ");
@@ -1504,12 +1631,12 @@ void tDEMOscreen() {
     lcd2.setCursor(0, 2);
     //print_time(SEC_TIMER, buffer2);
 
-	//DateTime now = rtc2.isConnected() ? rtc2.getDateTime() : DateTime(SEC_TIMER); // Pouijeme RTC pokud je pøipojeno, jinak pouijeme aktuální èas z millis()  
+	//DateTime now = rtc2.isConnected() ? rtc2.getDateTime() : DateTime(SEC_TIMER); // PouÅ¾ijeme RTC pokud je pÅ™ipojeno, jinak pouÅ¾ijeme aktuÃ¡lnÃ­ Äas z millis()  
     //String nowStr = now.timestamp(DateTime::TIMESTAMP_FULL);
 
     //lcd2.print(nowStr);
 
-	//lcd2.print(rtc2.getDateTimeString()); // Zobrazíme aktuální èas z RTC
+	//lcd2.print(rtc2.getDateTimeString()); // ZobrazÃ­me aktuÃ¡lnÃ­ Äas z RTC
     print_time(rtc2.getEpoch(), buffer2, sizeof(buffer2));
 
     //logToSerial(rtc2.getDateTimeString() , 1);
@@ -1537,30 +1664,30 @@ void tDEMOscreen() {
 
     if (net_on) {
         if (isSendingFileBuffer) {
-            lcd2.print(" ODESILAM SOUBOR... "); // Indikace probíhajícího odesílání
+            lcd2.print(" ODESILAM SOUBOR... "); // Indikace probÃ­hajÃ­cÃ­ho odesÃ­lÃ¡nÃ­
         }
         else {
-            lcd2.print("      ON-LINE       "); // Online a nic neodesíláme
+            lcd2.print("      ON-LINE       "); // Online a nic neodesÃ­lÃ¡me
         }
     }
-    else { // Offline - zobrazíme vyuití souboru
+    else { // Offline - zobrazÃ­me vyuÅ¾itÃ­ souboru
         File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
         if (bufferFile) {
             size_t fileSize = bufferFile.size();
             bufferFile.close();
 
-            // Vıpoèet procent (bezpeènı pro dìlení nulou, pokud by MAX_BUFFER_FILE_SIZE byla 0)
+            // VÃ½poÄet procent (bezpeÄnÃ½ pro dÄ›lenÃ­ nulou, pokud by MAX_BUFFER_FILE_SIZE byla 0)
             int usage_percent = 0;
             if (MAX_BUFFER_FILE_SIZE > 0) {
-                // Pouijeme 64bit int pro násobení, abychom pøedešli pøeteèení pøed dìlením
+                // PouÅ¾ijeme 64bit int pro nÃ¡sobenÃ­, abychom pÅ™edeÅ¡li pÅ™eteÄenÃ­ pÅ™ed dÄ›lenÃ­m
                 usage_percent = (int)(((uint64_t)fileSize * 100) / MAX_BUFFER_FILE_SIZE);
             }
-            if (usage_percent > 100) usage_percent = 100; // Omezení na max 100%
+            if (usage_percent > 100) usage_percent = 100; // OmezenÃ­ na max 100%
 
-            // Formátování vıpisu, napø. "OFF-LINE Buf:  15% "
+            // FormÃ¡tovÃ¡nÃ­ vÃ½pisu, napÅ™. "OFF-LINE Buf:  15% "
             char statusStr[21];
             snprintf(statusStr, sizeof(statusStr), "OFF-LINE  Volno:%3d%%", 100-usage_percent);
-            // Doplnìní mezerami do konce øádku
+            // DoplnÄ›nÃ­ mezerami do konce Å™Ã¡dku
             for (int i = strlen(statusStr); i < 20; ++i) statusStr[i] = ' ';
             statusStr[20] = '\0';
             lcd2.print(statusStr);
@@ -1569,26 +1696,26 @@ void tDEMOscreen() {
         else {
             Serial.printf("tDEMOscreen: Failed to open buffer file '%s' for reading size.\n", bufferFilePath);
 
-            // --- Pokus o zotavení: Zkontrolovat existenci a pøípadnì vytvoøit ---
+            // --- Pokus o zotavenÃ­: Zkontrolovat existenci a pÅ™Ã­padnÄ› vytvoÅ™it ---
             if (!LittleFS.exists(bufferFilePath)) {
-                // Soubor skuteènì neexistuje
+                // Soubor skuteÄnÄ› neexistuje
                 Serial.println("tDEMOscreen: Buffer file does not exist. Attempting recreation...");
-                lcd2.print("OFF-LINE (NEW FILE)"); // Indikace pokusu o vytvoøení na LCD
-                reset_buffer_file(); // Zavoláme funkci, která vytvoøí adresáø a prázdnı soubor
+                lcd2.print("OFF-LINE (NEW FILE)"); // Indikace pokusu o vytvoÅ™enÃ­ na LCD
+                reset_buffer_file(); // ZavolÃ¡me funkci, kterÃ¡ vytvoÅ™Ã­ adresÃ¡Å™ a prÃ¡zdnÃ½ soubor
             }
             else {
-                // Soubor existuje, ale pøesto nešel otevøít -> Pravdìpodobnì chyba FS
+                // Soubor existuje, ale pÅ™esto neÅ¡el otevÅ™Ã­t -> PravdÄ›podobnÄ› chyba FS
                 Serial.println("tDEMOscreen: Buffer file exists but cannot be opened (FS Error?). Displaying error.");
-                lcd2.print("OFF-LINE (File ERR)"); // Zobrazíme pùvodní chybovou hlášku
+                lcd2.print("OFF-LINE (File ERR)"); // ZobrazÃ­me pÅ¯vodnÃ­ chybovou hlÃ¡Å¡ku
             }
-            // --- Konec pokusu o zotavení ---
+            // --- Konec pokusu o zotavenÃ­ ---
         }
     }
-    // Práce s LCD je hotová, vrátíme klíè, aby ho mohl pouít nìkdo jinı.
+    // PrÃ¡ce s LCD je hotovÃ¡, vrÃ¡tÃ­me klÃ­Ä, aby ho mohl pouÅ¾Ã­t nÄ›kdo jinÃ½.
     xSemaphoreGive(i2cMutex);
     }
  else {
-     // Nepodaøilo se získat mutex do 1 sekundy, nìco je špatnì.
+     // NepodaÅ™ilo se zÃ­skat mutex do 1 sekundy, nÄ›co je Å¡patnÄ›.
      Serial.println("Chyba: tDEMOscreen nemohl ziskat I2C mutex!");
     }
 }
@@ -1602,11 +1729,11 @@ void unlockI2C() {
 }
 
 void loop() {
-    // Pokud jsme online, zkusíme zpracovat TCP komunikaci a pøípadnì odeslat data z offline bufferu.
+    // Pokud jsme online, zkusÃ­me zpracovat TCP komunikaci a pÅ™Ã­padnÄ› odeslat data z offline bufferu.
     if (net_on) {
-        TCP(); // Zpracování pøíchozích TCP dat od serveru.
+        TCP(); // ZpracovÃ¡nÃ­ pÅ™Ã­chozÃ­ch TCP dat od serveru.
 
-        // Pokud zrovna neprobíhá velké odesílání souboru, zkontrolujeme, jestli nìjakı soubor na odeslání nemáme.
+        // Pokud zrovna neprobÃ­hÃ¡ velkÃ© odesÃ­lÃ¡nÃ­ souboru, zkontrolujeme, jestli nÄ›jakÃ½ soubor na odeslÃ¡nÃ­ nemÃ¡me.
         if (!isSendingFileBuffer) {
             File bufferFileCheck = LittleFS.open(bufferFilePath, FILE_READ);
             bool fileHasData = (bufferFileCheck && bufferFileCheck.size() > 0);
@@ -1620,12 +1747,12 @@ void loop() {
         }
     }
 
-    // Zobrazíme hlavní obrazovku, pokud vypršel její timeout.
+    // ZobrazÃ­me hlavnÃ­ obrazovku, pokud vyprÅ¡el jejÃ­ timeout.
     if ((millis() / 1000) >= timeout1) {
         tDEMOscreen();
     }
 
-    // Pouijeme vTaskDelay pro lepší spolupráci s FreeRTOS.
+    // PouÅ¾ijeme vTaskDelay pro lepÅ¡Ã­ spoluprÃ¡ci s FreeRTOS.
     vTaskDelay(pdMS_TO_TICKS(5));
 }
 
@@ -1658,11 +1785,11 @@ void tDEMOcode(void* parameter) {
 }
 
 void tDEMOrun() {
-    //hlavní obrazovka
-    // Buffer pro zobrazení èasu na LCD
+    //hlavnÃ­ obrazovka
+    // Buffer pro zobrazenÃ­ Äasu na LCD
     char buffer2[100] = { 0 };
 
-    // Zobrazení informací na LCD
+    // ZobrazenÃ­ informacÃ­ na LCD
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
         lcd2.printf("   eMISTR 2025    ");
@@ -1715,19 +1842,23 @@ void logToSerial(const String vMessage, int pLogLevel) {
 }
 
 void connectToWiFi() {
-    setHostname(); // Set the hostname before connecting to WiFi
+    // Hostname odvoÄ z Wi-Fi STA MAC jeÅ¡tÄ› pÅ™ed DHCP
+    String host = "APT1220-" + readStaMacStr(false);
+    WiFi.setHostname(host.c_str());
+
     WiFi.begin(ssid, password);
 
     int retryAttempt = 0;
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
-        ++retryAttempt;
-        if (retryAttempt > 4) {
+        if (++retryAttempt > 4) {
             Serial.println("Failed to connect to WiFi.");
             return;
         }
     }
+    // pro logy/UX: drÅ¾ si aktivnÃ­ MAC i s pomlÄkami
+    activeMAC = readStaMacStr(true); // "AA-BB-CC-DD-EE-FF"
     Serial.println("WiFi connected");
 }
 
@@ -1751,12 +1882,9 @@ void WiFiEvent(WiFiEvent_t event)
     switch (event) {
 
     case ARDUINO_EVENT_ETH_START:
-        // This will happen during setup, when the Ethernet service starts
         Serial.println("ETH Started");
-        //set eth hostname here
-        //ETH.setHostname("esp32-ethernet");
-        setHostname();
-        //ETH.setHostname( ETH.macAddress().c_str() );
+        // je OK nastavit znovu â€“ nÄ›kterÃ© stacky to ocenÃ­
+        ETH.setHostname(("APT1220E-" + readEthMacStr(false)).c_str());
         break;
 
     case ARDUINO_EVENT_ETH_CONNECTED:
@@ -1765,27 +1893,11 @@ void WiFiEvent(WiFiEvent_t event)
         break;
 
     case ARDUINO_EVENT_ETH_GOT_IP:
-        // This will happen when we obtain an IP address through DHCP:
         Serial.print("Got an IP Address for ETH MAC: ");
-        Serial.print(ETH.macAddress());
-        Serial.print(", IPv4: ");
-        Serial.print(ETH.localIP());
-        if (ETH.fullDuplex()) {
-            Serial.print(", FULL_DUPLEX");
-        }
-        Serial.print(", ");
-        Serial.print(ETH.linkSpeed());
-        Serial.println("Mbps");
+        Serial.println(readEthMacStr(true));
         eth_connected = true;
-
-        activeMAC = ETH.macAddress();
-        activeMAC.replace(":", "-");
-        ETH.setHostname(activeMAC.c_str());
-        //ETH.hostname = activeMAC;
-
-        // Uncomment to automatically make a test connection to a server:
-        // testClient( "192.168.0.1", 80 );
-
+        activeMAC = readEthMacStr(true);  // pro tvoje UI/telemetrii
+        // ETH.setHostname(...) pÅ™Ã­padnÄ› idempotentnÄ› jeÅ¡tÄ› jednou
         break;
 
     case ARDUINO_EVENT_ETH_DISCONNECTED:
@@ -1804,7 +1916,8 @@ void WiFiEvent(WiFiEvent_t event)
         Serial.print("WIFI IPv4: ");
         Serial.println(WiFi.localIP().toString());
         Serial.print("Got an IP Address for WIFI MAC: ");
-        Serial.print(WiFi.macAddress());
+        Serial.println(readStaMacStr(true));
+        activeMAC = readStaMacStr(true);
         break;
 
         //    case ARDUINO_EVENT_WIFI_STA_START:
@@ -1819,16 +1932,16 @@ void WiFiEvent(WiFiEvent_t event)
 void get_time(unsigned long thetime, char* buff, size_t buff_size) {
     struct tm thetm;
 
-    // Pouíváme gmtime_r pro bezpeèné konvertování epochálního èasu na strukturovanı èas
+    // PouÅ¾Ã­vÃ¡me gmtime_r pro bezpeÄnÃ© konvertovÃ¡nÃ­ epochÃ¡lnÃ­ho Äasu na strukturovanÃ½ Äas
     gmtime_r((time_t*)&thetime, &thetm);
 
-    // Vytvoøení formátovaného øetìzce s datem a èasem
+    // VytvoÅ™enÃ­ formÃ¡tovanÃ©ho Å™etÄ›zce s datem a Äasem
     /*
     sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
-        //1900 + thetm.tm_year,    // Rok zaèíná od 1900
-        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
-        thetm.tm_mon + 1,        // Mìsíce jsou indexovány od 0
-        thetm.tm_mday,           // Den v mìsíci
+        //1900 + thetm.tm_year,    // Rok zaÄÃ­nÃ¡ od 1900
+        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaÄÃ­nÃ¡ od 1900
+        thetm.tm_mon + 1,        // MÄ›sÃ­ce jsou indexovÃ¡ny od 0
+        thetm.tm_mday,           // Den v mÄ›sÃ­ci
         thetm.tm_hour,           // Hodiny
         thetm.tm_min,            // Minuty
         thetm.tm_sec             // Sekundy
@@ -1836,9 +1949,9 @@ void get_time(unsigned long thetime, char* buff, size_t buff_size) {
     */
 
     snprintf(buff, buff_size, "%04d-%02d-%02d %02d:%02d:%02d",
-        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaèíná od 1900
-        thetm.tm_mon + 1,        // Mìsíce jsou indexovány od 0
-        thetm.tm_mday,           // Den v mìsíci
+        RTC_YEAR_OFFSET + thetm.tm_year,    // Rok zaÄÃ­nÃ¡ od 1900
+        thetm.tm_mon + 1,        // MÄ›sÃ­ce jsou indexovÃ¡ny od 0
+        thetm.tm_mday,           // Den v mÄ›sÃ­ci
         thetm.tm_hour,           // Hodiny
         thetm.tm_min,            // Minuty
         thetm.tm_sec             // Sekundy
@@ -1856,7 +1969,7 @@ void get_time(char* buff, size_t buff_size) {
     );
 }
 
-// PÙVODNÍ, JEDNODUCHÁ VERZE BEZ MUTEXÙ
+// PÅ®VODNÃ, JEDNODUCHÃ VERZE BEZ MUTEXÅ®
 void print_time(unsigned long thetime, char* buff, size_t buff_size) {
     snprintf(buff, buff_size, "%02d.%02d.%04d  %02d:%02d:%02d",
         rtc2.getDay(),
@@ -1878,21 +1991,21 @@ void setNetOn(int vNetOn, int vCallFromId) {
 
 void tLAST_PINGcode(void* parameter) {
     for (;;) {
-        // Zkusíme odeslat ping pøes naši novou bezpeènou funkci.
-        // Ta v sobì kontroluje, jestli je klient pøipojenı a stará se o mutex.
+        // ZkusÃ­me odeslat ping pÅ™es naÅ¡i novou bezpeÄnou funkci.
+        // Ta v sobÄ› kontroluje, jestli je klient pÅ™ipojenÃ½ a starÃ¡ se o mutex.
         if (tcp_print_safe("\x01\n")) {
-            // Pokud funkce vrátila true, znamená to, e odeslání probìhlo.
+            // Pokud funkce vrÃ¡tila true, znamenÃ¡ to, Å¾e odeslÃ¡nÃ­ probÄ›hlo.
             setNetOn(1, 15);
         }
         else {
-            // Pokud vrátila false, odeslání se nepovedlo.
-            // Nejspíš nejsme pøipojeni.
+            // Pokud vrÃ¡tila false, odeslÃ¡nÃ­ se nepovedlo.
+            // NejspÃ­Å¡ nejsme pÅ™ipojeni.
             setNetOn(0, 16);
-            // Zkusíme se tedy znovu bezpeènì pøipojit.
+            // ZkusÃ­me se tedy znovu bezpeÄnÄ› pÅ™ipojit.
             connectToServer_safe();
         }
 
-        // Poèkáme a opakujeme.
+        // PoÄkÃ¡me a opakujeme.
         vTaskDelay(pdMS_TO_TICKS(1900));
     }
 }
@@ -1917,7 +2030,7 @@ void TCP() {
     char buffer2[80] = { 0 };
     struct tm thetm = {};
 
-    // --- Kontrola stavu pøipojení ---
+    // --- Kontrola stavu pÅ™ipojenÃ­ ---
     SEC_TIMER = millis() / 1000;
     if (net_on == 1 && (long)(SEC_TIMER - last_ping) > ping_timeout) {
         if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -1928,7 +2041,7 @@ void TCP() {
         setNetOn(0, 7);
     }
 
-    // --- Reconnect, pokud jsme "on", ale socket není pøipojen ---
+    // --- Reconnect, pokud jsme "on", ale socket nenÃ­ pÅ™ipojen ---
     bool is_connected;
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         is_connected = client.connected();
@@ -1942,13 +2055,13 @@ void TCP() {
 
     if (!is_connected) return;
 
-    // Pokud nejsou ádná data, nic nedìláme a resetujeme si pamì posledního pøíkazu
+    // Pokud nejsou Å¾Ã¡dnÃ¡ data, nic nedÄ›lÃ¡me a resetujeme si pamÄ›Å¥ poslednÃ­ho pÅ™Ã­kazu
     if (client.available() == 0) {
         g_last_tcp_command_code = 0;
         return;
     }
 
-    // --- Ètení dat z klienta ---
+    // --- ÄŒtenÃ­ dat z klienta ---
     while (client.available() > 0) {
         size_t bytes_read = 0;
         if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -1970,7 +2083,7 @@ void TCP() {
 
         if ((buffer[0] == 'O') && (buffer[1] == 'K')) {
             setNetOn(1, 14);
-            g_last_tcp_command_code = 0; // 'OK' není pøíkaz pro displej, resetujeme
+            g_last_tcp_command_code = 0; // 'OK' nenÃ­ pÅ™Ã­kaz pro displej, resetujeme
             continue;
         }
 
@@ -2007,12 +2120,12 @@ void TCP() {
 
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                 // ============== ZDE JE TA MAGIE ==============
-                // Pokud pøedchozí pøíkaz nebyl také rámeèek, vykreslíme ho celı.
+                // Pokud pÅ™edchozÃ­ pÅ™Ã­kaz nebyl takÃ© rÃ¡meÄek, vykreslÃ­me ho celÃ½.
                 if (g_last_tcp_command_code != 0xE) {
                     lcd2.setCursor(0, 0); lcd2.printf("*------------------*");
                     lcd2.setCursor(0, 2); lcd2.printf("*------------------*");
                 }
-                // Ale text na prostøedním øádku aktualizujeme VDY.
+                // Ale text na prostÅ™ednÃ­m Å™Ã¡dku aktualizujeme VÅ½DY.
                 lcd2.setCursor(0, 1);
                 lcd2.print(line_buffer);
                 xSemaphoreGive(i2cMutex);
@@ -2025,7 +2138,7 @@ void TCP() {
         default: break;
         }
 
-        // Na konci zpracování si zapamatujeme kód aktuálního pøíkazu pro pøíští smyèku.
+        // Na konci zpracovÃ¡nÃ­ si zapamatujeme kÃ³d aktuÃ¡lnÃ­ho pÅ™Ã­kazu pro pÅ™Ã­Å¡tÃ­ smyÄku.
         g_last_tcp_command_code = buffer[0];
     }
 }
@@ -2033,38 +2146,38 @@ void TCP() {
 
 void display_line_formated(const char* message, const int linenumber) {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-        // Všechno se dìje uvnitø jednoho zamèení
+        // VÅ¡echno se dÄ›je uvnitÅ™ jednoho zamÄenÃ­
         _blank_line_unsafe(linenumber);
         //lcd2.setCursor(0, linenumber);
         lcd2.printf("%s",message);
 
-        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopÃ­Å¡u
     }
 }
 
 void display_line_unformated(const char* message, const int linenumber) {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-        // Všechno se dìje uvnitø jednoho zamèení
+        // VÅ¡echno se dÄ›je uvnitÅ™ jednoho zamÄenÃ­
         _blank_line_unsafe(linenumber);
         //lcd2.setCursor(0, linenumber);
         lcd2.printf(message);
 
-        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopÃ­Å¡u
     }
 }
 
 void display_temporary_status(const char* message, const int linenumber) {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-        // Všechno se dìje uvnitø jednoho zamèení
+        // VÅ¡echno se dÄ›je uvnitÅ™ jednoho zamÄenÃ­
         _blank_line_unsafe(linenumber);
         lcd2.setCursor(0, linenumber);
         lcd2.printf(message);
 
-        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopíšu
+        xSemaphoreGive(i2cMutex); // Odemknu hned, jak dopÃ­Å¡u
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // Poèkám
+        vTaskDelay(pdMS_TO_TICKS(2000)); // PoÄkÃ¡m
 
-        // Znovu si zamknu, abych po sobì uklidil
+        // Znovu si zamknu, abych po sobÄ› uklidil
         if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
             _blank_line_unsafe(linenumber);
             xSemaphoreGive(i2cMutex);
@@ -2127,7 +2240,7 @@ void send_buffer() {
 
     efect = 1;
 
-    // Zobrazení stavu pøenosu na LCD
+    // ZobrazenÃ­ stavu pÅ™enosu na LCD
     lcd2.setCursor(0, 0);
     lcd2.printf("*------------------*");
     lcd2.setCursor(0, 1);
@@ -2137,7 +2250,7 @@ void send_buffer() {
     lcd2.setCursor(0, 3);
     lcd2.printf("*------------------*");
 
-    // Pøíprava pro odeslání dat
+    // PÅ™Ã­prava pro odeslÃ¡nÃ­ dat
     if (!client.connected() || client.write("\x06A-100\n") != 7) {
         //net_on = 0;
         setNetOn(0, 3);
@@ -2146,31 +2259,31 @@ void send_buffer() {
     client.flush();
     delay(1000);
 
-    timeout2 = SEC_TIMER + 2;  // Timeout na odpovìï
+    timeout2 = SEC_TIMER + 2;  // Timeout na odpovÄ›Ä
     tmp[0] = '\0';
 
-    // Èekání na odpovìï od serveru
+    // ÄŒekÃ¡nÃ­ na odpovÄ›Ä od serveru
     while (((long)(SEC_TIMER - timeout2) <= 0) && (tmp[3] != '?')) {
         tmp[0] = '\0';
         server_read(tmp);
     }
 
     if (tmp[3] == '?') {
-        timeout2 = SEC_TIMER + 30;  // Zakázání pøepisu displeje
+        timeout2 = SEC_TIMER + 30;  // ZakÃ¡zÃ¡nÃ­ pÅ™episu displeje
         last_ping = SEC_TIMER;
         long l = fifo_first;
 
-        // Odeslání dat, dokud je sí pøipojena a existují data
+        // OdeslÃ¡nÃ­ dat, dokud je sÃ­Å¥ pÅ™ipojena a existujÃ­ data
         while ((fifo_first + 3 < fifo_last) && net_on) {
             memset(off_buffer, 0x00, off_buffer_size);
-            // Simulace naètení dat do `off_buffer`
+            // Simulace naÄtenÃ­ dat do `off_buffer`
             // xmem2root(off_buffer, fifo_first, off_buffer_size);
 
             tmp_send_data[0] = '\0';
             i = k = 0;
             set_first = 0;
 
-            // Vıbìr a formátování dat pro odeslání
+            // VÃ½bÄ›r a formÃ¡tovÃ¡nÃ­ dat pro odeslÃ¡nÃ­
             while ((off_buffer[i] != 0x0A) && (i <= 45)) {
                 j[0] = off_buffer[i];
                 j[1] = '\0';
@@ -2186,7 +2299,7 @@ void send_buffer() {
             strcat(tmp_send_data, "\n");
             k++;
 
-            // Kontrola pøipojení a odeslání dat
+            // Kontrola pÅ™ipojenÃ­ a odeslÃ¡nÃ­ dat
             if ((long)(SEC_TIMER - last_ping) > ping_timeout) setNetOn(0, 4);//net_on = 0;
 
             if (net_on == 1) {
@@ -2202,7 +2315,7 @@ void send_buffer() {
                         }
 
                         if (server_read(tmp) > 0) {
-                            tmp[strlen(tmp) - 1] = '\0';  // Odstranìní znaku '\n'
+                            tmp[strlen(tmp) - 1] = '\0';  // OdstranÄ›nÃ­ znaku '\n'
                             if (tmp[1] == 0x7E) {
                                 respons = 1;
                                 last_ping = SEC_TIMER;
@@ -2227,7 +2340,7 @@ void send_buffer() {
                 }
             }
 
-            // Zobrazení pokroku na LCD2
+            // ZobrazenÃ­ pokroku na LCD2
             lcd2.setCursor(0, 0);
             lcd2.printf("*------------------*");
             lcd2.setCursor(15, 0);
@@ -2243,14 +2356,14 @@ void send_buffer() {
             efect = (efect == 37) ? 1 : efect + 1;
         }
 
-        // Uvolnìní pamìti FIFO
+        // UvolnÄ›nÃ­ pamÄ›ti FIFO
         if ((long)(fifo_first + 3 >= fifo_last)) {
             fifo_last = fifo_start;
             fifo_first = fifo_start;
         }
     }
     else {
-        // Reset spojení pøi neúspìchu
+        // Reset spojenÃ­ pÅ™i neÃºspÄ›chu
         client.stop();
         net_on = 0;
         delay(200);
@@ -2259,32 +2372,32 @@ void send_buffer() {
 
 int server_read(char* buffer) {
     int len = 0;
-    char tmp[2] = { 0 };  // Vyrovnávací pamì pro jednotlivé znaky
+    char tmp[2] = { 0 };  // VyrovnÃ¡vacÃ­ pamÄ›Å¥ pro jednotlivÃ© znaky
     unsigned long timeout = SEC_TIMER + 2;
     bool ok = false;
-    *buffer = '\0';  // Inicializace bufferu na prázdnı øetìzec
+    *buffer = '\0';  // Inicializace bufferu na prÃ¡zdnÃ½ Å™etÄ›zec
 
     while (!ok && ((long)(SEC_TIMER - timeout) <= 0)) {
-        // Èekejte na data
+        // ÄŒekejte na data
         if (client.available()) {
-            len = client.readBytes(tmp, 1);  // Pøeètìte jeden znak
-            tmp[1] = '\0';  // Ukonèovací znak pro správné spojení s øetìzcem
+            len = client.readBytes(tmp, 1);  // PÅ™eÄtÄ›te jeden znak
+            tmp[1] = '\0';  // UkonÄovacÃ­ znak pro sprÃ¡vnÃ© spojenÃ­ s Å™etÄ›zcem
             if (len > 0) {
                 strcat(buffer, tmp);
-                // Pokud narazíme na novı øádek, ukonèujeme ètení
+                // Pokud narazÃ­me na novÃ½ Å™Ã¡dek, ukonÄujeme ÄtenÃ­
                 if (tmp[0] == '\n') {
                     ok = true;
                 }
             }
         }
 
-        // Pokud ádná data nepøichází, ukonèíme smyèku
+        // Pokud Å¾Ã¡dnÃ¡ data nepÅ™ichÃ¡zÃ­, ukonÄÃ­me smyÄku
         if (strlen(buffer) == 0) {
             ok = true;
         }
     }
 
-    return strlen(buffer);  // Vrací délku naètenıch dat
+    return strlen(buffer);  // VracÃ­ dÃ©lku naÄtenÃ½ch dat
 }
 
 void createDir(fs::FS& fs, const char* path) {
@@ -2298,25 +2411,20 @@ void createDir(fs::FS& fs, const char* path) {
 }
 
 void startAPMode() {
-    // Check if SoftAP is already running
-    if (WiFi.softAPgetStationNum() > 0) {
-        Serial.println("SoftAP is already running.");
-        return;
+    String ssidAP;
+    if (ap_ssid_use_mac) {
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);        // nezÃ¡vislÃ© na stavu driveru
+        ssidAP = String(ap_ssid) + "_" + macToStr(mac, false);  // napÅ™. APT1220_AP_7E2233445566
+    }
+    else {
+        ssidAP = String(ap_ssid);                      // ÄistÄ› fixnÃ­ SSID
     }
 
-    // Get the MAC address
-    String macAddress = WiFi.macAddress();
-    macAddress.replace(":", ""); // Remove colons from MAC address
-
-    // Create the SSID using the MAC address
-    String ssidAP = "APT1220_WIFI_" + macAddress;
-
-    // Start the SoftAP with the generated SSID
-    if (WiFi.softAP(ssidAP.c_str(), "12345678")) {
+    if (WiFi.softAP(ssidAP.c_str(), ap_pass)) {
         Serial.println("AP mode started. SSID: " + ssidAP);
         Serial.println("IP address: " + WiFi.softAPIP().toString());
 
-        // Start the web server
         server.on("/", HTTP_GET, handleRoot);
         server.on("/scan", HTTP_GET, handleScanNetworks);
         server.on("/save", HTTP_POST, handleSaveCredentials);
@@ -2327,7 +2435,6 @@ void startAPMode() {
         Serial.println("Failed to start AP mode.");
     }
 }
-
 
 void handleRoot(AsyncWebServerRequest* request) {
     String html = "<html><body>";
@@ -2380,7 +2487,7 @@ void handleSaveCredentials(AsyncWebServerRequest* request) {
         request->send(400, "text/html", "<html><body><h1>Invalid Input</h1></body></html>");
     }
 }
-
+/*
 void setHostname() {
     String macAddress = WiFi.macAddress();
     macAddress.replace(":", ""); // Remove colons from MAC address
@@ -2394,17 +2501,17 @@ void setHostname() {
     WiFi.setHostname(hostname.c_str());
     ETH.setHostname(hostname.c_str());
 }
-
+*/
 void checkForUpdates() {
-    Serial.println("Kontrola aktualizací...");
+    Serial.println("Kontrola aktualizacÃ­...");
 
-    // Staení souboru s verzí z serveru
+    // StaÅ¾enÃ­ souboru s verzÃ­ z serveru
     HTTPClient http;
-    // Explicitnì zaèínáme HTTP spojení se specifikací portu a timeoutu
+    // ExplicitnÄ› zaÄÃ­nÃ¡me HTTP spojenÃ­ se specifikacÃ­ portu a timeoutu
     http.begin(versionURL);
-    http.setTimeout(10000); // Nastavení delšího timeoutu (10 sekund)
+    http.setTimeout(10000); // NastavenÃ­ delÅ¡Ã­ho timeoutu (10 sekund)
 
-    // Pøidání hlavièek pro simulaci bìného browseru
+    // PÅ™idÃ¡nÃ­ hlaviÄek pro simulaci bÄ›Å¾nÃ©ho browseru
     http.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
     http.addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     http.addHeader("Accept-Language", "cs,en-US;q=0.7,en;q=0.3");
@@ -2413,10 +2520,10 @@ void checkForUpdates() {
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
         String serverVersion = http.getString();
-        serverVersion.trim(); // odstraní bílé znaky
+        serverVersion.trim(); // odstranÃ­ bÃ­lÃ© znaky
         Serial.print("Verze na serveru: ");
         Serial.println(serverVersion);
-        Serial.print("Verze na lokální: ");
+        Serial.print("Verze na lokÃ¡lnÃ­: ");
         Serial.println(localVersion);
 
         String localVersionTmp = localVersion;
@@ -2428,61 +2535,61 @@ void checkForUpdates() {
         int serverVersionInt = serverVersionTmp.toInt();
 
         if (serverVersionInt > localVersionInt) {
-            Serial.println("Nová verze nalezena, zahajuji aktualizaci...");
+            Serial.println("NovÃ¡ verze nalezena, zahajuji aktualizaci...");
 
-            // Vytvoøíme novı HTTPClient pro staení aktualizace
+            // VytvoÅ™Ã­me novÃ½ HTTPClient pro staÅ¾enÃ­ aktualizace
             HTTPClient updateClient;
 
-            // Pøidání hlavièek pro simulaci bìného browseru i pro update request
+            // PÅ™idÃ¡nÃ­ hlaviÄek pro simulaci bÄ›Å¾nÃ©ho browseru i pro update request
             updateClient.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             updateClient.addHeader("Accept", "*/*");
             updateClient.addHeader("Accept-Language", "cs,en-US;q=0.7,en;q=0.3");
             updateClient.addHeader("Connection", "keep-alive");
-            updateClient.setTimeout(30000); // Delší timeout pro stahování firmware (30 sekund)
+            updateClient.setTimeout(30000); // DelÅ¡Ã­ timeout pro stahovÃ¡nÃ­ firmware (30 sekund)
 
-            Serial.print("Pøipojuji se k: ");
+            Serial.print("PÅ™ipojuji se k: ");
             Serial.println(firmwareURL);
 
-            // Zkusíme nejprve pøímou metodu s pouitím WiFiClient místo HTTPClient
+            // ZkusÃ­me nejprve pÅ™Ã­mou metodu s pouÅ¾itÃ­m WiFiClient mÃ­sto HTTPClient
             WiFiClient client;
 
-            Serial.println("Pokouším se o aktualizaci pøes WiFiClient...");
+            Serial.println("PokouÅ¡Ã­m se o aktualizaci pÅ™es WiFiClient...");
             t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
 
-            // Pokud první metoda sele, zkusíme pùvodní metodu s HTTPClient
+            // Pokud prvnÃ­ metoda selÅ¾e, zkusÃ­me pÅ¯vodnÃ­ metodu s HTTPClient
             if (ret == HTTP_UPDATE_FAILED) {
-                Serial.println("První metoda selhala, zkouším alternativní metodu...");
+                Serial.println("PrvnÃ­ metoda selhala, zkouÅ¡Ã­m alternativnÃ­ metodu...");
                 ret = httpUpdate.update(updateClient, String(firmwareURL));
             }
 
             switch (ret) {
             case HTTP_UPDATE_FAILED:
                 Serial.printf("Aktualizace selhala: %d - %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
-                // Dodateèné debugování
+                // DodateÄnÃ© debugovÃ¡nÃ­
                 Serial.print("URL firmware: ");
                 Serial.println(firmwareURL);
                 break;
             case HTTP_UPDATE_NO_UPDATES:
-                Serial.println("Není k dispozici ádná nová aktualizace.");
+                Serial.println("NenÃ­ k dispozici Å¾Ã¡dnÃ¡ novÃ¡ aktualizace.");
                 break;
             case HTTP_UPDATE_OK:
-                Serial.println("Aktualizace probìhla úspìšnì.");
+                Serial.println("Aktualizace probÄ›hla ÃºspÄ›Å¡nÄ›.");
                 break;
             }
         }
         else {
-            Serial.println("Firmware je aktuální.");
+            Serial.println("Firmware je aktuÃ¡lnÃ­.");
         }
     }
     else {
-        Serial.printf("Nelze získat verzi, HTTP kód: %d\n", httpCode);
+        Serial.printf("Nelze zÃ­skat verzi, HTTP kÃ³d: %d\n", httpCode);
     }
     http.end();
 }
 
 
 
-// Funkce, která bìí jako samostatné vlákno
+// Funkce, kterÃ¡ bÄ›Å¾Ã­ jako samostatnÃ© vlÃ¡kno
 void otaUpdateTask(void* parameter) {
     Serial.println("OTA task started");
 
@@ -2492,59 +2599,59 @@ void otaUpdateTask(void* parameter) {
             checkForUpdatesBackground();
         }
 
-        // Pokud je aktualizace dostupná, proveï ji podle schématu URL
+        // Pokud je aktualizace dostupnÃ¡, proveÄ ji podle schÃ©matu URL
         if (otaUpdateAvailable && !otaInProgress) {
             Serial.print("Firmware URL pro aktualizaci: ");
             Serial.println(firmwareURL);
 
-            if (firmwareURL != NULL && strlen(firmwareURL) > 7) { // Základní kontrola platnosti URL
+            if (firmwareURL != NULL && strlen(firmwareURL) > 7) { // ZÃ¡kladnÃ­ kontrola platnosti URL
                 if (strncmp(firmwareURL, "https://", 8) == 0) {
-                    Serial.println("Detekováno HTTPS, volám performUpdateHTTPS().");
+                    Serial.println("DetekovÃ¡no HTTPS, volÃ¡m performUpdateHTTPS().");
                     performUpdateHTTPS();
                 }
                 else if (strncmp(firmwareURL, "http://", 7) == 0) {
-                    Serial.println("Detekováno HTTP, volám performUpdate().");
-                    performUpdate(); // Vaše existující funkce pro HTTP
+                    Serial.println("DetekovÃ¡no HTTP, volÃ¡m performUpdate().");
+                    performUpdate(); // VaÅ¡e existujÃ­cÃ­ funkce pro HTTP
                 }
                 else {
-                    Serial.println("CHYBA: firmwareURL má neznámé schéma nebo je neplatná!");
-                    otaUpdateAvailable = false; // Resetuj pøíznak, aby se to neopakovalo hned
-                    // otaInProgress zùstává false
+                    Serial.println("CHYBA: firmwareURL mÃ¡ neznÃ¡mÃ© schÃ©ma nebo je neplatnÃ¡!");
+                    otaUpdateAvailable = false; // Resetuj pÅ™Ã­znak, aby se to neopakovalo hned
+                    // otaInProgress zÅ¯stÃ¡vÃ¡ false
                 }
             }
             else {
-                Serial.println("CHYBA: firmwareURL je NULL nebo pøíliš krátká!");
-                otaUpdateAvailable = false; // Resetuj pøíznak
+                Serial.println("CHYBA: firmwareURL je NULL nebo pÅ™Ã­liÅ¡ krÃ¡tkÃ¡!");
+                otaUpdateAvailable = false; // Resetuj pÅ™Ã­znak
             }
         }
 
-        // Poèkej na další kontrolu.
-        // POZNÁMKA: 60000 ms je 1 MINUTA, ne 1 hodina. Pro 1 hodinu pouijte 3600000 ms.
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // Aktuálnì 1 minuta
+        // PoÄkej na dalÅ¡Ã­ kontrolu.
+        // POZNÃMKA: 60000 ms je 1 MINUTA, ne 1 hodina. Pro 1 hodinu pouÅ¾ijte 3600000 ms.
+        vTaskDelay(60000 / portTICK_PERIOD_MS); // AktuÃ¡lnÄ› 1 minuta
     }
 }
 
-// Kontroluje, zda je dostupná nová verze
+// Kontroluje, zda je dostupnÃ¡ novÃ¡ verze
 void checkForUpdatesBackground() {
-    Serial.println("Kontrola aktualizací na pozadí...");
+    Serial.println("Kontrola aktualizacÃ­ na pozadÃ­...");
 
-    // Staení souboru s verzí z serveru
+    // StaÅ¾enÃ­ souboru s verzÃ­ z serveru
     HTTPClient http;
     http.begin(versionURL);
     http.setTimeout(10000);
 
-    // Pøidání hlavièek pro simulaci bìného browseru
+    // PÅ™idÃ¡nÃ­ hlaviÄek pro simulaci bÄ›Å¾nÃ©ho browseru
     http.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
     http.addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
         String serverVersion = http.getString();
-        serverVersion.trim(); // odstraní bílé znaky
+        serverVersion.trim(); // odstranÃ­ bÃ­lÃ© znaky
 
         Serial.print("Verze na serveru: ");
         Serial.println(serverVersion);
-        Serial.print("Aktuální verze: ");
+        Serial.print("AktuÃ¡lnÃ­ verze: ");
         //Serial.println(currentVersion);
         Serial.println(localVersion);
 
@@ -2558,30 +2665,30 @@ void checkForUpdatesBackground() {
         int serverVersionInt = serverVersionTmp.toInt();
 
         if (serverVersionInt > localVersionInt) {
-            Serial.println("Nová verze nalezena!");
+            Serial.println("NovÃ¡ verze nalezena!");
             otaUpdateAvailable = true;
             newVersion = serverVersion;
         }
         else {
-            Serial.println("Firmware je aktuální.");
+            Serial.println("Firmware je aktuÃ¡lnÃ­.");
             otaUpdateAvailable = false;
         }
     }
     else {
-        Serial.printf("Nelze získat verzi, HTTP kód: %d\n", httpCode);
+        Serial.printf("Nelze zÃ­skat verzi, HTTP kÃ³d: %d\n", httpCode);
     }
     http.end();
 }
 
 // Provede samotnou aktualizaci
 void performUpdate() {
-    Serial.println("Zahajuji aktualizaci na pozadí...");
+    Serial.println("Zahajuji aktualizaci na pozadÃ­...");
     otaInProgress = true;
 
-    // Vytvoøení indikace na displeji (pokud je potøeba)
+    // VytvoÅ™enÃ­ indikace na displeji (pokud je potÅ™eba)
     // displayUpdateStatus("Aktualizace...");
 
-    // Pouijeme pøímou metodu s WiFiClient, která fungovala
+    // PouÅ¾ijeme pÅ™Ã­mou metodu s WiFiClient, kterÃ¡ fungovala
     WiFiClient client;
 
     t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
@@ -2591,31 +2698,31 @@ void performUpdate() {
         Serial.printf("Aktualizace selhala: %d - %s\n",
             httpUpdate.getLastError(),
             httpUpdate.getLastErrorString().c_str());
-        // Resetujeme pøíznaky pro pøípadnı další pokus
+        // Resetujeme pÅ™Ã­znaky pro pÅ™Ã­padnÃ½ dalÅ¡Ã­ pokus
         otaInProgress = false;
         otaUpdateAvailable = false;
         break;
 
     case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("Není k dispozici ádná nová aktualizace.");
+        Serial.println("NenÃ­ k dispozici Å¾Ã¡dnÃ¡ novÃ¡ aktualizace.");
         otaInProgress = false;
         otaUpdateAvailable = false;
         break;
 
     case HTTP_UPDATE_OK:
-        Serial.println("Aktualizace probìhla úspìšnì, restartuju...");
-        // Pøi úspìšné aktualizaci dojde k restartu ESP32
+        Serial.println("Aktualizace probÄ›hla ÃºspÄ›Å¡nÄ›, restartuju...");
+        // PÅ™i ÃºspÄ›Å¡nÃ© aktualizaci dojde k restartu ESP32
         break;
     }
 }
 
 // Performs the actual update (using HTTPS, following official example style)
 void performUpdateHTTPS() {
-    Serial.println("Zahajuji aktualizaci na pozadí (HTTPS)...");
+    Serial.println("Zahajuji aktualizaci na pozadÃ­ (HTTPS)...");
     otaInProgress = true;
     otaUpdateAvailable = false; // Consume the flag
 
-    Serial.print("Stahování z (HTTPS): ");
+    Serial.print("StahovÃ¡nÃ­ z (HTTPS): ");
     Serial.println(firmwareURL);
 
     WiFiClientSecure secureClientForUpdate;
@@ -2639,94 +2746,94 @@ void performUpdateHTTPS() {
         break;
 
     case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("Není k dispozici ádná nová aktualizace (dle httpUpdate).");
+        Serial.println("NenÃ­ k dispozici Å¾Ã¡dnÃ¡ novÃ¡ aktualizace (dle httpUpdate).");
         otaInProgress = false;
         break;
 
     case HTTP_UPDATE_OK:
-        Serial.println("Aktualizace probìhla úspìšnì, restartuju...");
+        Serial.println("Aktualizace probÄ›hla ÃºspÄ›Å¡nÄ›, restartuju...");
         // ESP32 will restart automatically.
         break;
     }
 }
 
-// Funkce pro inicializaci OTA úlohy - volejte v setup()
+// Funkce pro inicializaci OTA Ãºlohy - volejte v setup()
 void setupOTA() {
-    // Nastavíme aktuální verzi
-    //currentVersion = "1.0.0.0";  // Pro testování, v reálu by se èetla z konstanty
+    // NastavÃ­me aktuÃ¡lnÃ­ verzi
+    //currentVersion = "1.0.0.0";  // Pro testovÃ¡nÃ­, v reÃ¡lu by se Äetla z konstanty
 
-    // Vytvoøíme úlohu na jádøe 0 (hlavní aplikace bìí typicky na jádøe 1)
+    // VytvoÅ™Ã­me Ãºlohu na jÃ¡dÅ™e 0 (hlavnÃ­ aplikace bÄ›Å¾Ã­ typicky na jÃ¡dÅ™e 1)
     xTaskCreatePinnedToCore(
-        otaUpdateTask,      // Funkce, která implementuje úlohu
-        "OTATask",          // Název úlohy
-        8192,               // Velikost zásobníku (v slovech)
-        NULL,               // Parametr úlohy
-        1,                  // Priorita úlohy (niší èíslo = niší priorita)
-        &otaTaskHandle,     // Handle úlohy
-        0                   // Jádro CPU, na kterém má úloha bìet (0 nebo 1)
+        otaUpdateTask,      // Funkce, kterÃ¡ implementuje Ãºlohu
+        "OTATask",          // NÃ¡zev Ãºlohy
+        8192,               // Velikost zÃ¡sobnÃ­ku (v slovech)
+        NULL,               // Parametr Ãºlohy
+        1,                  // Priorita Ãºlohy (niÅ¾Å¡Ã­ ÄÃ­slo = niÅ¾Å¡Ã­ priorita)
+        &otaTaskHandle,     // Handle Ãºlohy
+        0                   // JÃ¡dro CPU, na kterÃ©m mÃ¡ Ãºloha bÄ›Å¾et (0 nebo 1)
     );
 }
 
 //************************************************************************
-// Nová funkce pro odeslání bufferu ze souboru aptbuffer.txt
+// NovÃ¡ funkce pro odeslÃ¡nÃ­ bufferu ze souboru aptbuffer.txt
 //************************************************************************
 void send_file_buffer() {
-    // 1. Zkontrolujeme, zda jsme online a pøipojeni
+    // 1. Zkontrolujeme, zda jsme online a pÅ™ipojeni
     if (!net_on || !client.connected()) {
-        return; // Nejsme online nebo pøipojeni, nemá smysl pokraèovat
+        return; // Nejsme online nebo pÅ™ipojeni, nemÃ¡ smysl pokraÄovat
     }
 
-    // 2. Zkusíme otevøít soubor bufferu pro ètení
+    // 2. ZkusÃ­me otevÅ™Ã­t soubor bufferu pro ÄtenÃ­
     File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
     if (!bufferFile || bufferFile.size() == 0) {
         if (bufferFile) bufferFile.close();
-        return; // Soubor neexistuje nebo je prázdnı
+        return; // Soubor neexistuje nebo je prÃ¡zdnÃ½
     }
 
-    // 3. Pøeèteme první øádek (zprávu) ze souboru
+    // 3. PÅ™eÄteme prvnÃ­ Å™Ã¡dek (zprÃ¡vu) ze souboru
     String lineToSend = "";
     if (bufferFile.available()) {
         lineToSend = bufferFile.readStringUntil('\n');
     }
 
     if (lineToSend.length() == 0) {
-        bufferFile.close(); // Nic jsme nepøeèetli (moná chyba nebo jen prázdnı øádek na zaèátku)
-        // Mùeme zkusit soubor promazat, pokud obsahuje jen bílé znaky? Prozatím ne.
+        bufferFile.close(); // Nic jsme nepÅ™eÄetli (moÅ¾nÃ¡ chyba nebo jen prÃ¡zdnÃ½ Å™Ã¡dek na zaÄÃ¡tku)
+        // MÅ¯Å¾eme zkusit soubor promazat, pokud obsahuje jen bÃ­lÃ© znaky? ProzatÃ­m ne.
         return;
     }
 
-    // Pøidáme zpìt znak nového øádku, pokud ho readStringUntil odstranil a server ho vyaduje
+    // PÅ™idÃ¡me zpÄ›t znak novÃ©ho Å™Ã¡dku, pokud ho readStringUntil odstranil a server ho vyÅ¾aduje
     lineToSend += "\n";
 
     Serial.print("Attempting to send from file buffer: ");
     Serial.print(lineToSend);
 
-    // 4. Pokusíme se odeslat první øádek
+    // 4. PokusÃ­me se odeslat prvnÃ­ Å™Ã¡dek
     bool send_success = false;
     if (client.print(lineToSend)) {
-        client.flush(); // Poèkáme na odeslání
+        client.flush(); // PoÄkÃ¡me na odeslÃ¡nÃ­
         Serial.println(" - Sent, waiting for confirmation...");
 
-        // 5. Èekáme na potvrzení od serveru (podobnì jako v pùvodním send_buffer)
-        //    Pouijeme jednoduchı mechanismus ètení s timeoutem
-        unsigned long confirm_timeout = millis() + 3000; // Timeout 3 sekundy na odpovìï
+        // 5. ÄŒekÃ¡me na potvrzenÃ­ od serveru (podobnÄ› jako v pÅ¯vodnÃ­m send_buffer)
+        //    PouÅ¾ijeme jednoduchÃ½ mechanismus ÄtenÃ­ s timeoutem
+        unsigned long confirm_timeout = millis() + 3000; // Timeout 3 sekundy na odpovÄ›Ä
         String response = "";
         while (millis() < confirm_timeout) {
             if (client.available()) {
                 response = client.readStringUntil('\n');
-                response.trim(); // Odstraníme bílé znaky
+                response.trim(); // OdstranÃ­me bÃ­lÃ© znaky
                 Serial.print(" - Received response: ");
                 Serial.println(response);
-                // Zde pøedpokládáme, e server pošle nìco specifického pro potvrzení
-                // Pùvodní kód èekal na odpovìï zaèínající na 0x7E (~)
-                // Upravte podmínku podle vaší serverové logiky
-                if (response.length() > 0 && response.startsWith("~")) { // Pøíklad: odpovìï zaèíná '~'
+                // Zde pÅ™edpoklÃ¡dÃ¡me, Å¾e server poÅ¡le nÄ›co specifickÃ©ho pro potvrzenÃ­
+                // PÅ¯vodnÃ­ kÃ³d Äekal na odpovÄ›Ä zaÄÃ­najÃ­cÃ­ na 0x7E (~)
+                // Upravte podmÃ­nku podle vaÅ¡Ã­ serverovÃ© logiky
+                if (response.length() > 0 && response.startsWith("~")) { // PÅ™Ã­klad: odpovÄ›Ä zaÄÃ­nÃ¡ '~'
                     send_success = true;
                     last_ping = SEC_TIMER; // Aktualizujeme last_ping
                     break;
                 }
             }
-            delay(10); // Krátká pauza, aby nebìela smyèka naplno
+            delay(10); // KrÃ¡tkÃ¡ pauza, aby nebÄ›Å¾ela smyÄka naplno
         }
         if (!send_success) {
             Serial.println(" - Confirmation failed or timed out.");
@@ -2735,16 +2842,16 @@ void send_file_buffer() {
     }
     else {
         Serial.println(" - Client print failed.");
-        setNetOn(0, 20); // Pravdìpodobnì problém se spojením
+        setNetOn(0, 20); // PravdÄ›podobnÄ› problÃ©m se spojenÃ­m
         bufferFile.close();
         return;
     }
 
-    // 6. Pokud odeslání a potvrzení probìhlo úspìšnì, pøepíšeme soubor bez odeslaného øádku
+    // 6. Pokud odeslÃ¡nÃ­ a potvrzenÃ­ probÄ›hlo ÃºspÄ›Å¡nÄ›, pÅ™epÃ­Å¡eme soubor bez odeslanÃ©ho Å™Ã¡dku
     if (send_success) {
         Serial.println(" - Send successful. Removing line from buffer file.");
 
-        // Otevøeme doèasnı soubor pro zápis
+        // OtevÅ™eme doÄasnÃ½ soubor pro zÃ¡pis
         File tempFile = LittleFS.open("/apt1220/aptbuffer.tmp", FILE_WRITE);
         if (!tempFile) {
             Serial.println("Error: Failed to open temporary buffer file for writing!");
@@ -2752,8 +2859,8 @@ void send_file_buffer() {
             return;
         }
 
-        // Zkopírujeme zbytek pùvodního souboru (od druhého øádku dál) do doèasného
-        char copyBuf[128]; // Buffer pro kopírování
+        // ZkopÃ­rujeme zbytek pÅ¯vodnÃ­ho souboru (od druhÃ©ho Å™Ã¡dku dÃ¡l) do doÄasnÃ©ho
+        char copyBuf[128]; // Buffer pro kopÃ­rovÃ¡nÃ­
         while (bufferFile.available()) {
             int bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf));
             if (bytesRead > 0) {
@@ -2761,30 +2868,30 @@ void send_file_buffer() {
             }
         }
 
-        // Zavøeme oba soubory
+        // ZavÅ™eme oba soubory
         bufferFile.close();
         tempFile.close();
 
-        // Smaeme pùvodní soubor a pøejmenujeme doèasnı
+        // SmaÅ¾eme pÅ¯vodnÃ­ soubor a pÅ™ejmenujeme doÄasnÃ½
         if (LittleFS.remove(bufferFilePath)) {
             if (LittleFS.rename("/apt1220/aptbuffer.tmp", bufferFilePath)) {
                 Serial.println(" - Buffer file updated successfully.");
             }
             else {
                 Serial.println("Error: Failed to rename temporary buffer file!");
-                // Pokusíme se smazat i doèasnı soubor, pokud pøejmenování selhalo
+                // PokusÃ­me se smazat i doÄasnÃ½ soubor, pokud pÅ™ejmenovÃ¡nÃ­ selhalo
                 LittleFS.remove("/apt1220/aptbuffer.tmp");
             }
         }
         else {
             Serial.println("Error: Failed to remove original buffer file!");
-            // Pokusíme se smazat i doèasnı soubor
+            // PokusÃ­me se smazat i doÄasnÃ½ soubor
             LittleFS.remove("/apt1220/aptbuffer.tmp");
         }
 
     }
     else {
-        // Pokud odeslání selhalo, soubor nemìníme, zavøeme ho a zkusíme to znovu pozdìji
+        // Pokud odeslÃ¡nÃ­ selhalo, soubor nemÄ›nÃ­me, zavÅ™eme ho a zkusÃ­me to znovu pozdÄ›ji
         Serial.println(" - Send failed. Buffer file remains unchanged.");
         bufferFile.close();
     }
@@ -2817,14 +2924,14 @@ void initializeSyncPrimitives() {
 }
 
 //************************************************************************
-// OPRAVENÁ funkce pro odeslání CELÉHO bufferu ze souboru aptbuffer.txt
-// Verze 4: Opraveno nebezpeèné volání isspace().
+// OPRAVENÃ funkce pro odeslÃ¡nÃ­ CELÃ‰HO bufferu ze souboru aptbuffer.txt
+// Verze 4: Opraveno nebezpeÄnÃ© volÃ¡nÃ­ isspace().
 //************************************************************************
 void send_entire_file_buffer() {
-    // 1. Kontrola sítì - pokud nejsme online, nemá smysl pokraèovat.
+    // 1. Kontrola sÃ­tÄ› - pokud nejsme online, nemÃ¡ smysl pokraÄovat.
     if (!net_on) return;
 
-    // Rychlá kontrola pøipojení klienta pomocí mutexu
+    // RychlÃ¡ kontrola pÅ™ipojenÃ­ klienta pomocÃ­ mutexu
     bool is_connected = false;
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         is_connected = client.connected();
@@ -2836,12 +2943,12 @@ void send_entire_file_buffer() {
     File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
     if (!bufferFile || bufferFile.size() == 0) {
         if (bufferFile) bufferFile.close();
-        return; // Soubor neexistuje nebo je prázdnı, není co dìlat.
+        return; // Soubor neexistuje nebo je prÃ¡zdnÃ½, nenÃ­ co dÄ›lat.
     }
 
     Serial.println(">>> Zahajuji odesilani offline bufferu ze souboru... <<<");
 
-    // Pøipravíme si doèasnı soubor, kam budeme ukládat øádky, které se nepodaøilo odeslat.
+    // PÅ™ipravÃ­me si doÄasnÃ½ soubor, kam budeme uklÃ¡dat Å™Ã¡dky, kterÃ© se nepodaÅ™ilo odeslat.
     String tempFileName = "/apt1220/aptbuffer.tmp";
     File tempFile = LittleFS.open(tempFileName, FILE_WRITE);
     if (!tempFile) {
@@ -2850,7 +2957,7 @@ void send_entire_file_buffer() {
         return;
     }
 
-    bool error_occurred = false; // Flag, kterı nám øekne, jestli se má pùvodní soubor smazat, nebo nahradit doèasnım.
+    bool error_occurred = false; // Flag, kterÃ½ nÃ¡m Å™ekne, jestli se mÃ¡ pÅ¯vodnÃ­ soubor smazat, nebo nahradit doÄasnÃ½m.
 
     // Indikace na LCD displeji
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
@@ -2862,7 +2969,7 @@ void send_entire_file_buffer() {
         xSemaphoreGive(i2cMutex);
     }
 
-    // 3. Smyèka pro ètení a odeslání všech øádkù ze souboru
+    // 3. SmyÄka pro ÄtenÃ­ a odeslÃ¡nÃ­ vÅ¡ech Å™Ã¡dkÅ¯ ze souboru
     while (bufferFile.available()) {
         String lineToSend = bufferFile.readStringUntil('\n');
         if (lineToSend.length() == 0) continue;
@@ -2889,7 +2996,7 @@ void send_entire_file_buffer() {
                 if (bytesRead > 0) {
                     responseBuffer[bytesRead] = '\0';
                     size_t n = strlen(responseBuffer);
-                    // Pøetypujeme responseBuffer[n-1] na (unsigned char), abychom pøedešli pádu.
+                    // PÅ™etypujeme responseBuffer[n-1] na (unsigned char), abychom pÅ™edeÅ¡li pÃ¡du.
                     while (n > 0 && isspace((unsigned char)responseBuffer[n - 1])) {
                         responseBuffer[--n] = '\0';
                     }
