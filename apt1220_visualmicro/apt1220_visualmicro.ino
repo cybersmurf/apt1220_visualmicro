@@ -37,6 +37,8 @@
 #include "esp_system.h"
 #include "esp_mac.h"
 
+#include "esp_heap_caps.h"   // (nové) na měření HEAPu/DMA
+
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
 
@@ -73,14 +75,14 @@ HardwareSerial SerialD(2); // Pro SerialD
 #define VERZE_PRACANT  "4.0.0"
 #define ALOC_MEM 64000
 #define SERB_USEPORTD
-#define timeout_reset 86400;  // jak casto resetovat
+#define timeout_reset 86400  // jak casto resetovat
 
 // commands of terminal
-#define C_ERROR_DATA     $00;  // nekorektni data
-#define C_ECHO           $01;  // Pošli odezvu        PC <-> TERMINAL
-#define C_SET_TIME       $02;  // Nastav čas          PC  -> TERMINAL
-#define C_GET_TIME       $03;  // Pošli čas           PC <-> TERMINAL
-#define C_DATA_WORKER    $04;  // Posilam zamestnance PC <-> TERMINAL
+#define C_ERROR_DATA     $00  // nekorektni data
+#define C_ECHO           $01  // Pošli odezvu        PC <-> TERMINAL
+#define C_SET_TIME       $02  // Nastav čas          PC  -> TERMINAL
+#define C_GET_TIME       $03  // Pošli čas           PC <-> TERMINAL
+#define C_DATA_WORKER    $04  // Posilam zamestnance PC <-> TERMINAL
 
 #define PORT 		     54321
 
@@ -90,6 +92,8 @@ HardwareSerial SerialD(2); // Pro SerialD
 #define IF_COMING_DOWN	 3
 
 #define RTC_YEAR_OFFSET  1900
+
+#define STACK_WORDS(bytes) ((bytes) / sizeof(StackType_t))
 
 //static int __attribute__((section(".noinit"))) loaded_default = 0;
 static int loaded_default = 0;
