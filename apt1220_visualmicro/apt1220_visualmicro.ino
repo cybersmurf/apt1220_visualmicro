@@ -1675,10 +1675,8 @@ void tDEMOscreen() {
     // Zobrazení informací na LCD
     if (key_maker == 0) {
         lcd2.setCursor(0, 0);
-        //lcd2.printf("   eMISTR ESP32    ");
-        String tmpConnType = " eMISTR 2025   ";
-        tmpConnType += useWifi ? "WIFI" : " ETH ";
-        lcd2.printf(tmpConnType.c_str());
+        lcd2.setCursor(0, 0);
+        lcd2.printf(" eMISTR 2025   %s ", useWifi ? "WIFI" : "ETH");
     }
     if (key_maker == 1) {
         lcd2.setCursor(0, 0);
@@ -2718,10 +2716,10 @@ void checkForUpdates() {
             Serial.println(firmwareURL);
 
             // Zkusíme nejprve přímou metodu s použitím WiFiClient místo HTTPClient
-            WiFiClient client;
+            WiFiClient fwClient;
 
             Serial.println(F("Pokouším se o aktualizaci přes WiFiClient..."));
-            t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
+            t_httpUpdate_return ret = httpUpdate.update(fwClient, firmwareURL);
 
             // Pokud první metoda selže, zkusíme původní metodu s HTTPClient
             if (ret == HTTP_UPDATE_FAILED) {
@@ -2856,9 +2854,9 @@ void performUpdate() {
     // displayUpdateStatus("Aktualizace...");
 
     // Použijeme přímou metodu s WiFiClient, která fungovala
-    WiFiClient client;
+    WiFiClient fwClient;
 
-    t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
+    t_httpUpdate_return ret = httpUpdate.update(fwClient, firmwareURL);
 
     switch (ret) {
     case HTTP_UPDATE_FAILED:
