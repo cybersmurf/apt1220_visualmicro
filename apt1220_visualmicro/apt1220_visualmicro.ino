@@ -263,6 +263,11 @@ SemaphoreHandle_t i2cMutex; // Mutex pro ochranu I2C sběrnice (LCD a RTC)
 static bool apSettingsChanged = false;   // nastavíš na true při změně SSID/hesla/flagu
 static bool pendingApRestart = false;   // nastavíš na true, když je potřeba restartovat AP
 
+TaskHandle_t hCommandProcessor = nullptr;
+TaskHandle_t hSerialCReader = nullptr;
+TaskHandle_t hSerialDReader = nullptr;
+
+
 static inline bool isApRunning() {
     return (WiFi.getMode() & WIFI_MODE_AP) != 0;   // AP nebo AP+STA
 }
@@ -484,8 +489,11 @@ void initializeNetwork() {
 }
 
 void initializeTasks() {
-    xTaskCreatePinnedToCore(tSEC_TIMERcode, "tSEC_TIMER", 4096, NULL, 0, &tSEC_TIMER, 1);
-    xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", 4096, NULL, 0, &tLAST_PING, 1);
+    //xTaskCreatePinnedToCore(tSEC_TIMERcode, "tSEC_TIMER", 4096, NULL, 0, &tSEC_TIMER, 1);
+    //xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", 4096, NULL, 0, &tLAST_PING, 1);
+
+    xTaskCreatePinnedToCore(tSEC_TIMERcode, "tSEC_TIMER", STACK_WORDS(1536), NULL, 0, &tSEC_TIMER, 1);
+    xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", STACK_WORDS(1536), NULL, 0, &tLAST_PING, 1);
 }
 
 void initializeDisplay() {
@@ -566,7 +574,9 @@ void setup() {
     timer_reset = SEC_TIMER + 86400;
     // Denní reset 
 
+
     // Vytvoříme task pro zpracování příkazů z fronty
+    /*
     xTaskCreatePinnedToCore(
         commandProcessorTask,   // Funkce tasku
         "CommandProcessor",     // Jméno
@@ -598,6 +608,11 @@ void setup() {
         NULL,                   // Handle
         1                       // Spustíme také na jádře 1
     );
+    */
+
+    xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(3072), NULL, 2, &hCommandProcessor, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, &hSerialCReader, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, &hSerialDReader, 1);
 
 #ifdef DEBUG_MODE
     // Start the web server in debug mode
@@ -2767,6 +2782,7 @@ void setupOTA() {
     //currentVersion = "1.0.0.0";  // Pro testování, v reálu by se četla z konstanty
 
     // Vytvoříme úlohu na jádře 0 (hlavní aplikace běží typicky na jádře 1)
+    /* 
     xTaskCreatePinnedToCore(
         otaUpdateTask,      // Funkce, která implementuje úlohu
         "OTATask",          // Název úlohy
@@ -2776,6 +2792,10 @@ void setupOTA() {
         &otaTaskHandle,     // Handle úlohy
         0                   // Jádro CPU, na kterém má úloha běžet (0 nebo 1)
     );
+    */
+
+    xTaskCreatePinnedToCore(otaUpdateTask, "OTATask", STACK_WORDS(4096), NULL, 1, &otaTaskHandle, 0);
+
 }
 
 //************************************************************************
