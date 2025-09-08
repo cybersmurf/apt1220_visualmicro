@@ -267,7 +267,49 @@ TaskHandle_t hCommandProcessor = nullptr;
 TaskHandle_t hSerialCReader = nullptr;
 TaskHandle_t hSerialDReader = nullptr;
 
+// ===== Memory & Task helpers =====
+static void printHeapStats(const char* tag) {
+    multi_heap_info_t i8 = {};
+    heap_caps_get_info(&i8, MALLOC_CAP_8BIT);
+    size_t total8 = i8.total_free_bytes + i8.total_allocated_bytes;
+    size_t free8 = i8.total_free_bytes;
+    size_t largest8 = i8.largest_free_block;
+    size_t min8 = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 
+    size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    size_t largestInt = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+
+    size_t freeDMA = heap_caps_get_free_size(MALLOC_CAP_DMA);
+    size_t largestDMA = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+    Serial.printf("\n===== HEAP STATS (WROOM) — %s =====\n", tag);
+    Serial.printf("8BIT: total=%u, free=%u, min=%u, largest=%u\n",
+        (unsigned)total8, (unsigned)free8, (unsigned)min8, (unsigned)largest8);
+    Serial.printf("INT : free=%u, largest=%u\n",
+        (unsigned)freeInt, (unsigned)largestInt);
+    Serial.printf("DMA : free=%u, largest=%u\n",
+        (unsigned)freeDMA, (unsigned)largestDMA);
+    Serial.printf("Arduino HEAP: free=%u, min=%u, maxAlloc=%u\n",
+        ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+}
+
+static void printTaskWatermarks() {
+    auto pw = [](const char* name, TaskHandle_t h) {
+        if (!h) return;
+        UBaseType_t words = uxTaskGetStackHighWaterMark(h);
+        Serial.printf("Task %-16s | min free stack ~ %u B\n", name, (unsigned)(words * 4));
+    };
+    Serial.println("\n===== TASK STACK WATERMARKS =====");
+    pw("tSEC_TIMER", tSEC_TIMER);
+    pw("tLAST_PING", tLAST_PING);
+    pw("CommandProcessor", hCommandProcessor);
+    pw("SerialC_Reader", hSerialCReader);
+    pw("SerialD_Reader", hSerialDReader);
+    pw("OTATask", otaTaskHandle);
+}
+
+
+// ===== Access Point (AP) helpers =====
 static inline bool isApRunning() {
     return (WiFi.getMode() & WIFI_MODE_AP) != 0;   // AP nebo AP+STA
 }
@@ -357,28 +399,28 @@ void initializeHardware() {
 void initializeFileSystem() {
     // Pokusíme se připojit LittleFS, formátovat pokud selže
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
-        Serial.println("LittleFS Mount Failed initially.");
+        Serial.println(F("LittleFS Mount Failed initially."));
 
         // --- Přidáno: Explicitní pokus o formátování ---
-        Serial.println("Attempting to format LittleFS...");
+        Serial.println(F("Attempting to format LittleFS..."));
         if (LittleFS.format()) {
-            Serial.println("LittleFS formatted successfully.");
+            Serial.println(F("LittleFS formatted successfully."));
             // Zkusíme připojit znovu po formátování
             if (!LittleFS.begin()) {
-                Serial.println("LittleFS Mount Failed even after format!");
+                Serial.println(F("LittleFS Mount Failed even after format!"));
                 return; // Ukončíme, pokud ani po formátu nelze připojit
             }
-            Serial.println("LittleFS Mounted successfully after format.");
+            Serial.println(F("LittleFS Mounted successfully after format."));
         }
         else {
-            Serial.println("LittleFS format failed.");
+            Serial.println(F("LittleFS format failed."));
             return; // Ukončíme, pokud formátování selže
         }
         // --- Konec přidaného kódu ---
 
     }
     else {
-        Serial.println("LittleFS Mount Successful");
+        Serial.println(F("LittleFS Mount Successful"));
     }
 
 
@@ -387,7 +429,7 @@ void initializeFileSystem() {
     }
     else
     {
-        Serial.print("Buffer file exists: ");
+        Serial.print(F("Buffer file exists: "));
         Serial.println(bufferFilePath);
 
         File bufferFile = LittleFS.open(bufferFilePath, FILE_READ); // Otevřeme soubor pro čtení
@@ -399,14 +441,14 @@ void initializeFileSystem() {
             bufferFile.close(); // Zavřeme soubor
         }
         else {
-            Serial.println(" -> Error: Failed to open buffer file to get size.");
+            Serial.println(F(" -> Error: Failed to open buffer file to get size."));
         }
 
     }
 }
 
 void initializeNetwork() {
-    Serial.println("--- Initializing Network ---");
+    Serial.println(F("--- Initializing Network ---"));
     WiFi.onEvent(WiFiEvent);
     bool wifiConnected = false;
     bool ethInitOk = false;
@@ -430,7 +472,7 @@ void initializeNetwork() {
             ETH.setHostname(hostE.c_str());
 
             if (!useDHCP) {
-                Serial.println("Configuring static IP for ETH...");
+                Serial.println(F("Configuring static IP for ETH..."));
                 IPAddress local_IP, gateway, subnet, primaryDNS;
 
                 local_IP.fromString(ip_adr);
@@ -439,7 +481,7 @@ void initializeNetwork() {
                 primaryDNS.fromString(ip_server);
 
                 if (!ETH.config(local_IP, gateway, subnet, primaryDNS)) {
-                    Serial.println("ETH: Failed to configure static IP!");
+                    Serial.println(F("ETH: Failed to configure static IP!"));
                 }
             }
 
@@ -447,25 +489,25 @@ void initializeNetwork() {
             // Počkáme chvilku, aby se stihly eventy zpracovat a DHCP priradit IP
             delay(1000);
 
-            Serial.println("ETH Interface Status:");
-            Serial.print("  MAC: ");
+            Serial.println(F("ETH Interface Status:"));
+            Serial.print(F("  MAC: "));
             Serial.println(ETH.macAddress());
-            Serial.print("  IP Address: ");
+            Serial.print(F("  IP Address: "));
             Serial.println(ETH.localIP());
-            Serial.print("  Subnet Mask: ");
+            Serial.print(F("  Subnet Mask: "));
             Serial.println(ETH.subnetMask());
-            Serial.print("  Gateway: ");
+            Serial.print(F("  Gateway: "));
             Serial.println(ETH.gatewayIP());
-            Serial.print("  DNS Server: ");
+            Serial.print(F("  DNS Server: "));
             Serial.println(ETH.dnsIP());
-            Serial.print("  Link Status: ");
+            Serial.print(F("  Link Status: "));
             Serial.println(ETH.linkUp() ? "UP" : "DOWN");
-            Serial.print("  Link Speed: ");
+            Serial.print(F("  Link Speed: "));
             Serial.println(String(ETH.linkSpeed()) + " Mbps");
 
         }
         else {
-            Serial.println("FATAL: ETH.begin() failed!");
+            Serial.println(F("FATAL: ETH.begin() failed!"));
         }
     }
 
@@ -478,14 +520,14 @@ void initializeNetwork() {
 
     // AP Mode spustíme jen pokud selhala WiFi i Ethernet
     if (!wifiConnected && !eth_connected) {
-        Serial.println("No network connection, starting AP Mode.");
+        Serial.println(F("No network connection, starting AP Mode."));
         startAPMode();
     }
     else {
-        Serial.println("Network connection established, connecting to server...");
+        Serial.println(F("Network connection established, connecting to server..."));
         connectToServer();
     }
-    Serial.println("--- Network Initialization Finished ---");
+    Serial.println(F("--- Network Initialization Finished ---"));
 }
 
 void initializeTasks() {
@@ -493,7 +535,8 @@ void initializeTasks() {
     //xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", 4096, NULL, 0, &tLAST_PING, 1);
 
     xTaskCreatePinnedToCore(tSEC_TIMERcode, "tSEC_TIMER", STACK_WORDS(1536), NULL, 0, &tSEC_TIMER, 1);
-    xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", STACK_WORDS(1536), NULL, 0, &tLAST_PING, 1);
+    xTaskCreatePinnedToCore(tLAST_PINGcode, "tLAST_PING", STACK_WORDS(8192), NULL, 1, &tLAST_PING, 0);
+
 }
 
 void initializeDisplay() {
@@ -533,7 +576,7 @@ void setup() {
     rtc2.setHourMode(CLOCK_H24);
 
     if (!rtc2.isRunning()) {
-        Serial.println("RTC is NOT running, let's set the time!");
+        Serial.println(F("RTC is NOT running, let's set the time!"));
         rtc2.startClock();
     }
 
@@ -610,9 +653,9 @@ void setup() {
     );
     */
 
-    xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(3072), NULL, 2, &hCommandProcessor, 1);
-    xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, &hSerialCReader, 1);
-    xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, &hSerialDReader, 1);
+    xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(3072), NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, NULL, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, NULL, 1);
 
 #ifdef DEBUG_MODE
     // Start the web server in debug mode
@@ -620,7 +663,7 @@ void setup() {
     server.on("/scan", HTTP_GET, handleScanNetworks);
     server.on("/save", HTTP_POST, handleSaveCredentials);
     server.begin();
-    Serial.println("Web server started in debug mode.");
+    Serial.println(F("Web server started in debug mode."));
 #endif
 }
 
@@ -720,7 +763,7 @@ bool tcp_print_safe(const char* data) {
         xSemaphoreGive(tcpMutex);
     }
     else {
-        Serial.println("CHYBA: tcp_print_safe nemohl ziskat TCP mutex!");
+        Serial.println(F("CHYBA: tcp_print_safe nemohl ziskat TCP mutex!"));
     }
     return success;
 }
@@ -731,12 +774,12 @@ bool tcp_print_safe(const char* data) {
 void connectToServer_safe() {
     // Vezmeme si klíč
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        Serial.println("Pokousim se pripojit k serveru...");
+        Serial.println(F("Pokousim se pripojit k serveru..."));
         if (client.connect(serverIP, serverPort)) {
             setNetOn(1, 12);
             SEC_TIMER = millis() / 1000;
             last_ping = SEC_TIMER;
-            Serial.println("Pripojeno k serveru.");
+            Serial.println(F("Pripojeno k serveru."));
         }
         else {
             setNetOn(0, 13);
@@ -746,7 +789,7 @@ void connectToServer_safe() {
         xSemaphoreGive(tcpMutex);
     }
     else {
-        Serial.println("CHYBA: connectToServer_safe nemohl ziskat TCP mutex!");
+        Serial.println(F("CHYBA: connectToServer_safe nemohl ziskat TCP mutex!"));
     }
 }
 
@@ -942,7 +985,7 @@ void resetConfig() {
     // Zavřete existující TCP připojení
     if (client.connected()) {
         client.stop();
-        Serial.println("TCP client disconnected");
+        Serial.println(F("TCP client disconnected"));
     }
 
     // Restart WiFi připojení
@@ -951,7 +994,7 @@ void resetConfig() {
 
     // Nastavení statické IP (pokud je požadována statická IP)
     if (!WiFi.config(IPAddress(ip_adr), IPAddress(ip_gate), IPAddress(ip_mask))) {
-        Serial.println("STA Failed to configure");
+        Serial.println(F("STA Failed to configure"));
     }
 
     Serial.println(useWifi ? "WIFI connect" : "ETH connect");
@@ -963,7 +1006,7 @@ void resetConfig() {
 
     // Starth Ethernet (this does NOT start WiFi at the same time)
     if (useETH) {
-        Serial.print("Starting ETH interface...");
+        Serial.print(F("Starting ETH interface..."));
         ETH.begin();
     }
 
@@ -980,7 +1023,7 @@ void resetConfig() {
 
     // Otevřete nové TCP připojení
     connectToServer_safe();
-	Serial.println("TCP client reinitialized");
+	Serial.println(F("TCP client reinitialized"));
 }
 
 void reader_input(const char* display_str, char* data_to_fill) {
@@ -1071,7 +1114,7 @@ void reader_input(const char* display_str, char* data_to_fill) {
         xSemaphoreGive(i2cMutex);
     }
     else {
-        Serial.println("Chyba: reader_input nemohl ziskat I2C mutex!");
+        Serial.println(F("Chyba: reader_input nemohl ziskat I2C mutex!"));
     }
 
     // Po opuštění funkce nastavíme timeout na nulu, abychom vynutili
@@ -1362,6 +1405,10 @@ void serial(char* buffer2, int port) {
 		menuconfigwifi();
         timeout1 = SEC_TIMER + timer2;
     }
+    else if (buffer2String.equals("HEAP")) {
+        printHeapStats("manual");
+        printTaskWatermarks();
+        }
     else if (buffer2String.equals("RESET-BUFFER")) {
         reset_buffer_file();
         /*
@@ -1510,7 +1557,7 @@ void serial(char* buffer2, int port) {
                 strcat(off_buffer, tmp); // Přidat do off_buffer, jen pokud se vejde
             }
             else {
-                Serial.println("CHYBA: off_buffer je plny, nelze pripojit zpravu:");
+                Serial.println(F("CHYBA: off_buffer je plny, nelze pripojit zpravu:"));
                 Serial.print(tmp);
             }
             // --- Konec kontroly velikosti ---
@@ -1566,7 +1613,7 @@ void serial(char* buffer2, int port) {
                 }
                 else {
                     // Není co zapisovat (off_buffer je prázdný)
-                    Serial.println("DEBUG: off_buffer je prazdny, neni co zapisovat do souboru.");
+                    Serial.println(F("DEBUG: off_buffer je prazdny, neni co zapisovat do souboru."));
                     can_write_to_file = false; // Není potřeba volat appendFile
                 }
                 // --- Konec kontroly velikosti souboru ---
@@ -1718,13 +1765,13 @@ void tDEMOscreen() {
             // --- Pokus o zotavení: Zkontrolovat existenci a případně vytvořit ---
             if (!LittleFS.exists(bufferFilePath)) {
                 // Soubor skutečně neexistuje
-                Serial.println("tDEMOscreen: Buffer file does not exist. Attempting recreation...");
+                Serial.println(F("tDEMOscreen: Buffer file does not exist. Attempting recreation..."));
                 lcd2.print("OFF-LINE (NEW FILE)"); // Indikace pokusu o vytvoření na LCD
                 reset_buffer_file(); // Zavoláme funkci, která vytvoří adresář a prázdný soubor
             }
             else {
                 // Soubor existuje, ale přesto nešel otevřít -> Pravděpodobně chyba FS
-                Serial.println("tDEMOscreen: Buffer file exists but cannot be opened (FS Error?). Displaying error.");
+                Serial.println(F("tDEMOscreen: Buffer file exists but cannot be opened (FS Error?). Displaying error."));
                 lcd2.print("OFF-LINE (File ERR)"); // Zobrazíme původní chybovou hlášku
             }
             // --- Konec pokusu o zotavení ---
@@ -1735,7 +1782,7 @@ void tDEMOscreen() {
     }
  else {
      // Nepodařilo se získat mutex do 1 sekundy, něco je špatně.
-     Serial.println("Chyba: tDEMOscreen nemohl ziskat I2C mutex!");
+     Serial.println(F("Chyba: tDEMOscreen nemohl ziskat I2C mutex!"));
     }
 }
 
@@ -1746,6 +1793,76 @@ void lockI2C() {
 void unlockI2C() {
     xSemaphoreGive(i2cMutex);
 }
+
+#ifdef DEBUG_MODE
+static uint32_t s_lastDebugTickMs = 0;
+
+static void debugHeartbeatTick() {
+    // Uptime
+    uint32_t up_s = millis() / 1000;
+
+    // Síť a IP
+    bool tcpConn = false;
+    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        tcpConn = client.connected();
+        xSemaphoreGive(tcpMutex);
+    }
+    IPAddress ip = useETH ? ETH.localIP() : WiFi.localIP();
+
+    // Heap
+    size_t heap_free = esp_get_free_heap_size();
+    size_t heap_min_free = esp_get_minimum_free_heap_size();
+    size_t heap_largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
+    // Offline buffer – velikost
+    size_t bufSize = 0;
+    File bf = LittleFS.open(bufferFilePath, FILE_READ);
+    if (bf) { bufSize = bf.size(); bf.close(); }
+
+    Serial.println(F("=== DEBUG 20s ==="));
+    Serial.printf("Uptime: %lus\n", (unsigned long)up_s);
+    Serial.printf("Conn: %s  Link:%s  TCP:%s  IP:%s  Server:%s:%d\n",
+        useETH ? "ETH" : "WIFI",
+        useETH ? (ETH.linkUp() ? "UP" : "DOWN") : "-",
+        tcpConn ? "connected" : "no",
+        ip.toString().c_str(),
+        serverIP, serverPort);
+    Serial.printf("net_on:%d  eth_connected:%d  last_ping:%lu  SEC_TIMER:%lu\n",
+        net_on, eth_connected, (unsigned long)last_ping, (unsigned long)SEC_TIMER);
+
+    // Heapy
+    Serial.printf("Heap free:%u  min:%u  largest:%u (bytes)\n",
+        (unsigned)heap_free, (unsigned)heap_min_free, (unsigned)heap_largest);
+
+    // Stack watermarky (co máme jako handle)
+    if (tLAST_PING) {
+        UBaseType_t w = uxTaskGetStackHighWaterMark(tLAST_PING);
+        Serial.printf("tLAST_PING watermark: %u words (~%u B)\n",
+            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+    }
+    if (tSEC_TIMER) {
+        UBaseType_t w = uxTaskGetStackHighWaterMark(tSEC_TIMER);
+        Serial.printf("tSEC_TIMER watermark: %u words (~%u B)\n",
+            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+    }
+    if (otaTaskHandle) {
+        UBaseType_t w = uxTaskGetStackHighWaterMark(otaTaskHandle);
+        Serial.printf("OTATask watermark: %u words (~%u B)\n",
+            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+    }
+
+    // Offline soubor
+    Serial.printf("Offline buffer file: %s  size:%u / %u\n",
+        bufferFilePath, (unsigned)bufSize, (unsigned)MAX_BUFFER_FILE_SIZE);
+
+    // MAC info pro jistotu
+    Serial.printf("MAC ETH:%s  STA:%s  active:%s\n",
+        ETH.macAddress().c_str(), WiFi.macAddress().c_str(), activeMAC.c_str());
+
+    Serial.println();
+}
+#endif
+
 
 void loop() {
     // Pokud jsme online, zkusíme zpracovat TCP komunikaci a případně odeslat data z offline bufferu.
@@ -1770,6 +1887,15 @@ void loop() {
     if ((millis() / 1000) >= timeout1) {
         tDEMOscreen();
     }
+
+	// Debug heartbeat každých 20 sekund
+    #ifdef DEBUG_MODE
+        if (millis() - s_lastDebugTickMs >= 20000UL) {
+            s_lastDebugTickMs = millis();
+            debugHeartbeatTick();
+        }
+    #endif
+
 
     // Použijeme vTaskDelay pro lepší spolupráci s FreeRTOS.
     vTaskDelay(pdMS_TO_TICKS(5));
@@ -1872,15 +1998,16 @@ void connectToWiFi() {
         delay(500);
         Serial.print(".");
         if (++retryAttempt > 4) {
-            Serial.println("Failed to connect to WiFi.");
+            Serial.println(F("Failed to connect to WiFi."));
             return;
         }
     }
     // pro logy/UX: drž si aktivní MAC i s pomlčkami
     activeMAC = readStaMacStr(true); // "AA-BB-CC-DD-EE-FF"
-    Serial.println("WiFi connected");
+    Serial.println(F("WiFi connected"));
 }
 
+/*
 void connectToServer() {
     if (client.connect(serverIP, serverPort)) {
         setNetOn(1, 12);
@@ -1894,6 +2021,27 @@ void connectToServer() {
         //startAPMode(); // Start AP mode if server connection fails
     }
 }
+*/
+
+void connectToServer() {
+    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (client.connect(serverIP, serverPort)) {
+            setNetOn(1, 12);
+            SEC_TIMER = millis() / 1000;
+            last_ping = SEC_TIMER;
+            Serial.println(F("Connected to server"));
+        }
+        else {
+            setNetOn(0, 13);
+            Serial.println(F("Connection to server failed"));
+        }
+        xSemaphoreGive(tcpMutex);
+    }
+    else {
+        Serial.println(F("CHYBA: connectToServer nemohl ziskat TCP mutex!"));
+    }
+}
+
 
 // React to Ethernet events:
 void WiFiEvent(WiFiEvent_t event)
@@ -1901,18 +2049,18 @@ void WiFiEvent(WiFiEvent_t event)
     switch (event) {
 
     case ARDUINO_EVENT_ETH_START:
-        Serial.println("ETH Started");
+        Serial.println(F("ETH Started"));
         // je OK nastavit znovu – některé stacky to ocení
         ETH.setHostname(("APT1220E-" + readEthMacStr(false)).c_str());
         break;
 
     case ARDUINO_EVENT_ETH_CONNECTED:
         // This will happen when the Ethernet cable is plugged 
-        Serial.println("ETH Connected");
+        Serial.println(F("ETH Connected"));
         break;
 
     case ARDUINO_EVENT_ETH_GOT_IP:
-        Serial.print("Got an IP Address for ETH MAC: ");
+        Serial.print(F("Got an IP Address for ETH MAC: "));
         Serial.println(readEthMacStr(true));
         eth_connected = true;
         activeMAC = readEthMacStr(true);  // pro tvoje UI/telemetrii
@@ -1921,20 +2069,20 @@ void WiFiEvent(WiFiEvent_t event)
 
     case ARDUINO_EVENT_ETH_DISCONNECTED:
         // This will happen when the Ethernet cable is unplugged 
-        Serial.println("ETH Disconnected");
+        Serial.println(F("ETH Disconnected"));
         eth_connected = false;
         break;
 
     case ARDUINO_EVENT_ETH_STOP:
         // This will happen when the ETH interface is stopped but this never happens
-        Serial.println("ETH Stopped");
+        Serial.println(F("ETH Stopped"));
         eth_connected = false;
         break;
 
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        Serial.print("WIFI IPv4: ");
+        Serial.print(F("WIFI IPv4: "));
         Serial.println(WiFi.localIP().toString());
-        Serial.print("Got an IP Address for WIFI MAC: ");
+        Serial.print(F("Got an IP Address for WIFI MAC: "));
         Serial.println(readStaMacStr(true));
         activeMAC = readStaMacStr(true);
         break;
@@ -2212,14 +2360,14 @@ void writeFile(fs::FS& fs, const char* path, const char* message) {
     if (!file) { file = fs.open(path, FILE_WRITE, true); }
 
     if (!file) {
-        Serial.println("- failed to open file for writing");
+        Serial.println(F("- failed to open file for writing"));
         return;
     }
     if (file.print(message)) {
-        Serial.println("- file written");
+        Serial.println(F("- file written"));
     }
     else {
-        Serial.println("- write failed");
+        Serial.println(F("- write failed"));
     }
     file.close();
 }
@@ -2229,14 +2377,14 @@ void appendFile(fs::FS& fs, const char* path, const char* message) {
 
     File file = fs.open(path, FILE_APPEND);
     if (!file) {
-        Serial.println("- failed to open file for appending");
+        Serial.println(F("- failed to open file for appending"));
         return;
     }
     if (file.print(message)) {
-        Serial.println("- message appended");
+        Serial.println(F("- message appended"));
     }
     else {
-        Serial.println("- append failed");
+        Serial.println(F("- append failed"));
     }
     file.close();
 }
@@ -2422,10 +2570,10 @@ int server_read(char* buffer) {
 void createDir(fs::FS& fs, const char* path) {
     Serial.printf("Creating Dir: %s\n", path);
     if (fs.mkdir(path)) {
-        Serial.println("Dir created");
+        Serial.println(F("Dir created"));
     }
     else {
-        Serial.println("mkdir failed");
+        Serial.println(F("mkdir failed"));
     }
 }
 
@@ -2448,10 +2596,10 @@ void startAPMode() {
         server.on("/scan", HTTP_GET, handleScanNetworks);
         server.on("/save", HTTP_POST, handleSaveCredentials);
         server.begin();
-        Serial.println("Web server started.");
+        Serial.println(F("Web server started."));
     }
     else {
-        Serial.println("Failed to start AP mode.");
+        Serial.println(F("Failed to start AP mode."));
     }
 }
 
@@ -2522,7 +2670,7 @@ void setHostname() {
 }
 */
 void checkForUpdates() {
-    Serial.println("Kontrola aktualizací...");
+    Serial.println(F("Kontrola aktualizací..."));
 
     // Stažení souboru s verzí z serveru
     HTTPClient http;
@@ -2540,9 +2688,9 @@ void checkForUpdates() {
     if (httpCode == HTTP_CODE_OK) {
         String serverVersion = http.getString();
         serverVersion.trim(); // odstraní bílé znaky
-        Serial.print("Verze na serveru: ");
+        Serial.print(F("Verze na serveru: "));
         Serial.println(serverVersion);
-        Serial.print("Verze na lokální: ");
+        Serial.print(F("Verze na lokální: "));
         Serial.println(localVersion);
 
         String localVersionTmp = localVersion;
@@ -2554,7 +2702,7 @@ void checkForUpdates() {
         int serverVersionInt = serverVersionTmp.toInt();
 
         if (serverVersionInt > localVersionInt) {
-            Serial.println("Nová verze nalezena, zahajuji aktualizaci...");
+            Serial.println(F("Nová verze nalezena, zahajuji aktualizaci..."));
 
             // Vytvoříme nový HTTPClient pro stažení aktualizace
             HTTPClient updateClient;
@@ -2566,18 +2714,18 @@ void checkForUpdates() {
             updateClient.addHeader("Connection", "keep-alive");
             updateClient.setTimeout(30000); // Delší timeout pro stahování firmware (30 sekund)
 
-            Serial.print("Připojuji se k: ");
+            Serial.print(F("Připojuji se k: "));
             Serial.println(firmwareURL);
 
             // Zkusíme nejprve přímou metodu s použitím WiFiClient místo HTTPClient
             WiFiClient client;
 
-            Serial.println("Pokouším se o aktualizaci přes WiFiClient...");
+            Serial.println(F("Pokouším se o aktualizaci přes WiFiClient..."));
             t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
 
             // Pokud první metoda selže, zkusíme původní metodu s HTTPClient
             if (ret == HTTP_UPDATE_FAILED) {
-                Serial.println("První metoda selhala, zkouším alternativní metodu...");
+                Serial.println(F("První metoda selhala, zkouším alternativní metodu..."));
                 ret = httpUpdate.update(updateClient, String(firmwareURL));
             }
 
@@ -2585,19 +2733,19 @@ void checkForUpdates() {
             case HTTP_UPDATE_FAILED:
                 Serial.printf("Aktualizace selhala: %d - %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
                 // Dodatečné debugování
-                Serial.print("URL firmware: ");
+                Serial.print(F("URL firmware: "));
                 Serial.println(firmwareURL);
                 break;
             case HTTP_UPDATE_NO_UPDATES:
-                Serial.println("Není k dispozici žádná nová aktualizace.");
+                Serial.println(F("Není k dispozici žádná nová aktualizace."));
                 break;
             case HTTP_UPDATE_OK:
-                Serial.println("Aktualizace proběhla úspěšně.");
+                Serial.println(F("Aktualizace proběhla úspěšně."));
                 break;
             }
         }
         else {
-            Serial.println("Firmware je aktuální.");
+            Serial.println(F("Firmware je aktuální."));
         }
     }
     else {
@@ -2620,26 +2768,26 @@ void otaUpdateTask(void* parameter) {
 
         // Pokud je aktualizace dostupná, proveď ji podle schématu URL
         if (otaUpdateAvailable && !otaInProgress) {
-            Serial.print("Firmware URL pro aktualizaci: ");
+            Serial.print(F("Firmware URL pro aktualizaci: "));
             Serial.println(firmwareURL);
 
             if (firmwareURL != NULL && strlen(firmwareURL) > 7) { // Základní kontrola platnosti URL
                 if (strncmp(firmwareURL, "https://", 8) == 0) {
-                    Serial.println("Detekováno HTTPS, volám performUpdateHTTPS().");
+                    Serial.println(F("Detekováno HTTPS, volám performUpdateHTTPS()."));
                     performUpdateHTTPS();
                 }
                 else if (strncmp(firmwareURL, "http://", 7) == 0) {
-                    Serial.println("Detekováno HTTP, volám performUpdate().");
+                    Serial.println(F("Detekováno HTTP, volám performUpdate()."));
                     performUpdate(); // Vaše existující funkce pro HTTP
                 }
                 else {
-                    Serial.println("CHYBA: firmwareURL má neznámé schéma nebo je neplatná!");
+                    Serial.println(F("CHYBA: firmwareURL má neznámé schéma nebo je neplatná!"));
                     otaUpdateAvailable = false; // Resetuj příznak, aby se to neopakovalo hned
                     // otaInProgress zůstává false
                 }
             }
             else {
-                Serial.println("CHYBA: firmwareURL je NULL nebo příliš krátká!");
+                Serial.println(F("CHYBA: firmwareURL je NULL nebo příliš krátká!"));
                 otaUpdateAvailable = false; // Resetuj příznak
             }
         }
@@ -2652,7 +2800,7 @@ void otaUpdateTask(void* parameter) {
 
 // Kontroluje, zda je dostupná nová verze
 void checkForUpdatesBackground() {
-    Serial.println("Kontrola aktualizací na pozadí...");
+    Serial.println(F("Kontrola aktualizací na pozadí..."));
 
     // Stažení souboru s verzí z serveru
     HTTPClient http;
@@ -2668,9 +2816,9 @@ void checkForUpdatesBackground() {
         String serverVersion = http.getString();
         serverVersion.trim(); // odstraní bílé znaky
 
-        Serial.print("Verze na serveru: ");
+        Serial.print(F("Verze na serveru: "));
         Serial.println(serverVersion);
-        Serial.print("Aktuální verze: ");
+        Serial.print(F("Aktuální verze: "));
         //Serial.println(currentVersion);
         Serial.println(localVersion);
 
@@ -2684,12 +2832,12 @@ void checkForUpdatesBackground() {
         int serverVersionInt = serverVersionTmp.toInt();
 
         if (serverVersionInt > localVersionInt) {
-            Serial.println("Nová verze nalezena!");
+            Serial.println(F("Nová verze nalezena!"));
             otaUpdateAvailable = true;
             newVersion = serverVersion;
         }
         else {
-            Serial.println("Firmware je aktuální.");
+            Serial.println(F("Firmware je aktuální."));
             otaUpdateAvailable = false;
         }
     }
@@ -2701,7 +2849,7 @@ void checkForUpdatesBackground() {
 
 // Provede samotnou aktualizaci
 void performUpdate() {
-    Serial.println("Zahajuji aktualizaci na pozadí...");
+    Serial.println(F("Zahajuji aktualizaci na pozadí..."));
     otaInProgress = true;
 
     // Vytvoření indikace na displeji (pokud je potřeba)
@@ -2723,13 +2871,13 @@ void performUpdate() {
         break;
 
     case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("Není k dispozici žádná nová aktualizace.");
+        Serial.println(F("Není k dispozici žádná nová aktualizace."));
         otaInProgress = false;
         otaUpdateAvailable = false;
         break;
 
     case HTTP_UPDATE_OK:
-        Serial.println("Aktualizace proběhla úspěšně, restartuju...");
+        Serial.println(F("Aktualizace proběhla úspěšně, restartuju..."));
         // Při úspěšné aktualizaci dojde k restartu ESP32
         break;
     }
@@ -2737,11 +2885,11 @@ void performUpdate() {
 
 // Performs the actual update (using HTTPS, following official example style)
 void performUpdateHTTPS() {
-    Serial.println("Zahajuji aktualizaci na pozadí (HTTPS)...");
+    Serial.println(F("Zahajuji aktualizaci na pozadí (HTTPS)..."));
     otaInProgress = true;
     otaUpdateAvailable = false; // Consume the flag
 
-    Serial.print("Stahování z (HTTPS): ");
+    Serial.print(F("Stahování z (HTTPS): "));
     Serial.println(firmwareURL);
 
     WiFiClientSecure secureClientForUpdate;
@@ -2765,12 +2913,12 @@ void performUpdateHTTPS() {
         break;
 
     case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("Není k dispozici žádná nová aktualizace (dle httpUpdate).");
+        Serial.println(F("Není k dispozici žádná nová aktualizace (dle httpUpdate)."));
         otaInProgress = false;
         break;
 
     case HTTP_UPDATE_OK:
-        Serial.println("Aktualizace proběhla úspěšně, restartuju...");
+        Serial.println(F("Aktualizace proběhla úspěšně, restartuju..."));
         // ESP32 will restart automatically.
         break;
     }
@@ -2829,14 +2977,14 @@ void send_file_buffer() {
     // Přidáme zpět znak nového řádku, pokud ho readStringUntil odstranil a server ho vyžaduje
     lineToSend += "\n";
 
-    Serial.print("Attempting to send from file buffer: ");
+    Serial.print(F("Attempting to send from file buffer: "));
     Serial.print(lineToSend);
 
     // 4. Pokusíme se odeslat první řádek
     bool send_success = false;
     if (client.print(lineToSend)) {
         client.flush(); // Počkáme na odeslání
-        Serial.println(" - Sent, waiting for confirmation...");
+        Serial.println(F(" - Sent, waiting for confirmation..."));
 
         // 5. Čekáme na potvrzení od serveru (podobně jako v původním send_buffer)
         //    Použijeme jednoduchý mechanismus čtení s timeoutem
@@ -2846,7 +2994,7 @@ void send_file_buffer() {
             if (client.available()) {
                 response = client.readStringUntil('\n');
                 response.trim(); // Odstraníme bílé znaky
-                Serial.print(" - Received response: ");
+                Serial.print(F(" - Received response: "));
                 Serial.println(response);
                 // Zde předpokládáme, že server pošle něco specifického pro potvrzení
                 // Původní kód čekal na odpověď začínající na 0x7E (~)
@@ -2860,12 +3008,12 @@ void send_file_buffer() {
             delay(10); // Krátká pauza, aby neběžela smyčka naplno
         }
         if (!send_success) {
-            Serial.println(" - Confirmation failed or timed out.");
+            Serial.println(F(" - Confirmation failed or timed out."));
         }
 
     }
     else {
-        Serial.println(" - Client print failed.");
+        Serial.println(F(" - Client print failed."));
         setNetOn(0, 20); // Pravděpodobně problém se spojením
         bufferFile.close();
         return;
@@ -2873,12 +3021,12 @@ void send_file_buffer() {
 
     // 6. Pokud odeslání a potvrzení proběhlo úspěšně, přepíšeme soubor bez odeslaného řádku
     if (send_success) {
-        Serial.println(" - Send successful. Removing line from buffer file.");
+        Serial.println(F(" - Send successful. Removing line from buffer file."));
 
         // Otevřeme dočasný soubor pro zápis
         File tempFile = LittleFS.open("/apt1220/aptbuffer.tmp", FILE_WRITE);
         if (!tempFile) {
-            Serial.println("Error: Failed to open temporary buffer file for writing!");
+            Serial.println(F("Error: Failed to open temporary buffer file for writing!"));
             bufferFile.close();
             return;
         }
@@ -2899,16 +3047,16 @@ void send_file_buffer() {
         // Smažeme původní soubor a přejmenujeme dočasný
         if (LittleFS.remove(bufferFilePath)) {
             if (LittleFS.rename("/apt1220/aptbuffer.tmp", bufferFilePath)) {
-                Serial.println(" - Buffer file updated successfully.");
+                Serial.println(F(" - Buffer file updated successfully."));
             }
             else {
-                Serial.println("Error: Failed to rename temporary buffer file!");
+                Serial.println(F("Error: Failed to rename temporary buffer file!"));
                 // Pokusíme se smazat i dočasný soubor, pokud přejmenování selhalo
                 LittleFS.remove("/apt1220/aptbuffer.tmp");
             }
         }
         else {
-            Serial.println("Error: Failed to remove original buffer file!");
+            Serial.println(F("Error: Failed to remove original buffer file!"));
             // Pokusíme se smazat i dočasný soubor
             LittleFS.remove("/apt1220/aptbuffer.tmp");
         }
@@ -2916,7 +3064,7 @@ void send_file_buffer() {
     }
     else {
         // Pokud odeslání selhalo, soubor neměníme, zavřeme ho a zkusíme to znovu později
-        Serial.println(" - Send failed. Buffer file remains unchanged.");
+        Serial.println(F(" - Send failed. Buffer file remains unchanged."));
         bufferFile.close();
     }
 }
@@ -2925,25 +3073,25 @@ void initializeSyncPrimitives() {
     // Create mutex for safe I2C access (LCD and RTC)
     i2cMutex = xSemaphoreCreateMutex();
     if (i2cMutex == NULL) {
-        Serial.println("Chyba pri vytvareni I2C mutexu!");
+        Serial.println(F("Chyba pri vytvareni I2C mutexu!"));
     }
 
     // Create mutex for safe TCP client access
     tcpMutex = xSemaphoreCreateMutex();
     if (tcpMutex == NULL) {
-        Serial.println("Chyba pri vytvareni TCP mutexu!");
+        Serial.println(F("Chyba pri vytvareni TCP mutexu!"));
     }
 
     // Create mutex for the demo screen task
     demoMutex = xSemaphoreCreateMutex();
     if (demoMutex == NULL) {
-        Serial.println("Chyba pri vytvareni Demo mutexu!");
+        Serial.println(F("Chyba pri vytvareni Demo mutexu!"));
     }
 
     // Create the queue for serial data
     serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
     if (serialDataQueue == NULL) {
-        Serial.println("Chyba pri vytvareni fronty!");
+        Serial.println(F("Chyba pri vytvareni fronty!"));
     }
 }
 
@@ -2970,13 +3118,13 @@ void send_entire_file_buffer() {
         return; // Soubor neexistuje nebo je prázdný, není co dělat.
     }
 
-    Serial.println(">>> Zahajuji odesilani offline bufferu ze souboru... <<<");
+    Serial.println(F(">>> Zahajuji odesilani offline bufferu ze souboru... <<<"));
 
     // Připravíme si dočasný soubor, kam budeme ukládat řádky, které se nepodařilo odeslat.
     String tempFileName = "/apt1220/aptbuffer.tmp";
     File tempFile = LittleFS.open(tempFileName, FILE_WRITE);
     if (!tempFile) {
-        Serial.println("CHYBA: Nelze otevrit docasny soubor pro zapis!");
+        Serial.println(F("CHYBA: Nelze otevrit docasny soubor pro zapis!"));
         bufferFile.close();
         return;
     }
@@ -3063,14 +3211,14 @@ void send_entire_file_buffer() {
 
     if (LittleFS.rename(tempFileName, bufferFilePath)) {
         if (error_occurred) {
-            Serial.println(">>> Odesilani bufferu dokonceno s chybami. Neodeslana data zachovana. <<<");
+            Serial.println(F(">>> Odesilani bufferu dokonceno s chybami. Neodeslana data zachovana. <<<"));
         }
         else {
-            Serial.println(">>> Offline buffer uspesne odeslan a smazan. <<<");
+            Serial.println(F(">>> Offline buffer uspesne odeslan a smazan. <<<"));
         }
     }
     else {
-        Serial.println("CHYBA: Kriticka chyba pri prejmenovani docasneho souboru!");
+        Serial.println(F("CHYBA: Kriticka chyba pri prejmenovani docasneho souboru!"));
     }
 
     timeout1 = 0;
