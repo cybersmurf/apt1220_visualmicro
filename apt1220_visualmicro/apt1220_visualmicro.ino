@@ -39,6 +39,22 @@
 
 #include "esp_heap_caps.h"   // (nové) na měření HEAPu/DMA
 
+// Bluetooth
+#define USE_BLE 1
+
+#define NIMBLE_MAX_CONNECTIONS 1
+#define NIMBLE_MAX_BONDS 0
+#define NIMBLE_MAX_CCCDS 0
+#define CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU 23
+// jen observer mód
+#define CONFIG_BT_NIMBLE_ROLE_OBSERVER 1
+#define CONFIG_BT_NIMBLE_ROLE_CENTRAL  0
+#define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL 0
+#define CONFIG_BT_NIMBLE_ROLE_BROADCASTER 0
+
+#include <NimBLEDevice.h>
+#include <NimBLEAdvertisedDevice.h>
+
 #define SPIFFS LittleFS
 #define FORMAT_LITTLEFS_IF_FAILED true
 
@@ -267,6 +283,64 @@ TaskHandle_t hCommandProcessor = nullptr;
 TaskHandle_t hSerialCReader = nullptr;
 TaskHandle_t hSerialDReader = nullptr;
 
+// ===== BLE helpers =====
+#if USE_BLE
+TaskHandle_t hBLEScan = nullptr;       // watermark do tvého debug výpisu
+static volatile uint32_t g_bleSeen = 0;   // kolik adv. rámců jsme zachytili
+
+class MyScanCallbacks : public NimBLEScanCallbacks {
+    static inline void macToStr(const NimBLEAddress& addr, char out[18]) {
+        auto s = addr.toString(); strncpy(out, s.c_str(), 17); out[17] = '\0';
+    }
+public:
+    void onResult(const NimBLEAdvertisedDevice* d) override {
+        // minimální práce v callbacku → šetří CPU/RAM
+        g_bleSeen++;
+        // pokud bys chtěl, sem lze doplnit parsování Eddystone TLM (jako v tvém kódu)
+    }
+};
+#endif
+
+#if USE_BLE
+static void bleInit() {
+    // přesně jako v tvém BLE scanneru:
+    NimBLEDevice::init("");
+    // malé buffery a nízký TX výkon → nízká režie
+    NimBLEDevice::setMTU(23);
+    //NimBLEDevice::setPower(NIMBLE_POWER_LEVEL_N0);
+
+    NimBLEScan* pScan = NimBLEDevice::getScan();
+    static MyScanCallbacks cb;
+    pScan->setScanCallbacks(&cb);
+
+    pScan->setActiveScan(true);   // stejně jako u tebe
+    pScan->setInterval(100);
+    pScan->setWindow(80);
+
+    pScan->setMaxResults(0);      // NEukládej interní výsledky => žádné hromadění
+    pScan->setDuplicateFilter(false); // stejné nastavení jako tvůj kód
+}
+
+// jednoduchý scan task – periodicky “burst” sken + clearResults
+void bleScanTask(void* pv) {
+    bleInit();
+    NimBLEScan* pScan = NimBLEDevice::getScan();
+
+    const uint32_t SCAN_SEC = 2;         // stejné defaulty jako v tvém scanneru
+    const uint32_t IDLE_MS = 3000;      // pauza mezi skeny (drž RAM/CPU dole)
+
+    for (;;) {
+        // getResults(durationMs, is_continue=false) odpovídá tvému vzoru
+        (void)pScan->getResults(SCAN_SEC * 1000, false);
+        pScan->clearResults();             // uvolni RAM hned po vlně
+
+        vTaskDelay(pdMS_TO_TICKS(IDLE_MS));
+    }
+}
+#endif
+
+
+
 // ===== Memory & Task helpers =====
 static void printHeapStats(const char* tag) {
     multi_heap_info_t i8 = {};
@@ -306,6 +380,10 @@ static void printTaskWatermarks() {
     pw("SerialC_Reader", hSerialCReader);
     pw("SerialD_Reader", hSerialDReader);
     pw("OTATask", otaTaskHandle);
+#if USE_BLE
+    pw("BLE_Scan", hBLEScan);
+#endif
+	Serial.println("==================================");
 }
 
 
@@ -564,7 +642,9 @@ void loadConfiguration() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-
+#ifdef DEBUG_MODE
+    printHeapStats("boot");
+#endif
     localVersion = "1.0.1.6";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
@@ -657,6 +737,13 @@ void setup() {
     xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, NULL, 1);
     xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, NULL, 1);
 
+#if USE_BLE
+    // Core 0, nízká priorita; stack měj konzervativně – sleduj HWM a klidně stáhni
+    xTaskCreatePinnedToCore(bleScanTask, "BLE_Scan",
+        STACK_WORDS(4096), nullptr, 0, &hBLEScan, 0);
+#endif
+
+
 #ifdef DEBUG_MODE
     // Start the web server in debug mode
     server.on("/", HTTP_GET, handleRoot);
@@ -664,6 +751,10 @@ void setup() {
     server.on("/save", HTTP_POST, handleSaveCredentials);
     server.begin();
     Serial.println(F("Web server started in debug mode."));
+
+    printHeapStats("end setup");
+    printTaskWatermarks();
+	delay(1000);
 #endif
 }
 
@@ -1808,9 +1899,9 @@ static void debugHeartbeatTick() {
     IPAddress ip = useETH ? ETH.localIP() : WiFi.localIP();
 
     // Heap
-    size_t heap_free = esp_get_free_heap_size();
-    size_t heap_min_free = esp_get_minimum_free_heap_size();
-    size_t heap_largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    //size_t heap_free = esp_get_free_heap_size();
+    //size_t heap_min_free = esp_get_minimum_free_heap_size();
+    //size_t heap_largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
     // Offline buffer – velikost
     size_t bufSize = 0;
@@ -1829,8 +1920,12 @@ static void debugHeartbeatTick() {
         net_on, eth_connected, (unsigned long)last_ping, (unsigned long)SEC_TIMER);
 
     // Heapy
-    Serial.printf("Heap free:%u  min:%u  largest:%u (bytes)\n",
-        (unsigned)heap_free, (unsigned)heap_min_free, (unsigned)heap_largest);
+    //Serial.printf("Heap free:%u  min:%u  largest:%u (bytes)\n",
+    //    (unsigned)heap_free, (unsigned)heap_min_free, (unsigned)heap_largest);
+    printHeapStats("tick");          // ← jednotný, podrobnější výpis
+    static uint8_t k = 0;
+    if ((++k % 3) == 0)              // třeba každou 3. dávku (1 min)
+		printTaskWatermarks();   // ← jednou za čas, protože je to relativně drahé
 
     // Stack watermarky (co máme jako handle)
     if (tLAST_PING) {
@@ -1856,6 +1951,10 @@ static void debugHeartbeatTick() {
     // MAC info pro jistotu
     Serial.printf("MAC ETH:%s  STA:%s  active:%s\n",
         ETH.macAddress().c_str(), WiFi.macAddress().c_str(), activeMAC.c_str());
+
+#if USE_BLE
+    Serial.printf("BLE seen:%lu\n", (unsigned long)g_bleSeen);
+#endif
 
     Serial.println();
 }
