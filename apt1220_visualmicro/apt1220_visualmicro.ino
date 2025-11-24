@@ -775,6 +775,18 @@ void serialReaderTask(void* parameter) {
                 receivedData.data[len] = '\0'; // Ukončíme řetězec
                 receivedData.port = portNumber;
 
+                if ((portNumber == 1) && (rfid_reader_c == 1) && (len > 10)) {
+                    Serial.printf("RFID modul na portu C prijal data: %s\n", receivedData.data);
+                    receivedData.data[10] = '\0'; // Truncate the string to 10 characters
+                    Serial.printf("Data po orezani: %s\n", receivedData.data);
+				}
+
+                if ((portNumber == 2) && (rfid_reader_d == 1) && (len > 10)) {
+                    Serial.printf("RFID modul na portu D prijal data: %s\n", receivedData.data);
+                    receivedData.data[10] = '\0'; // Truncate the string to 10 characters
+                    Serial.printf("Data po orezani: %s\n", receivedData.data);
+                }
+
                 // Pošleme data do fronty. Pokud je fronta plná, počkáme max 100ms.
                 if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
                     Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
