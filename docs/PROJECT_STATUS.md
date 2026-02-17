@@ -6,7 +6,7 @@
 
 | Položka | Hodnota |
 |---|---|
-| Firmware verze | `1.0.1.9` |
+| Firmware verze | `1.0.2.1` |
 | Protokol verze | `4.0.0` (VERZE_PRACANT) |
 | ESP32 Core | 3.3.7 (ESP-IDF 5.x) |
 | AsyncTCP | 3.4.10 (ESP32Async) |
@@ -26,6 +26,7 @@
 - **OTA aktualizace** — HTTPS i HTTP, kontrola verze na serveru, task na Core 0
 - **RTC DS1307** — synchronizace času ze serveru, zobrazení na LCD
 - **FreeRTOS synchronizace** — i2cMutex, tcpMutex, serialDataQueue
+- **Konfigurační vstup** — podpora `DEFAULT` i `BACKSPACE` pro mazání znaků
 
 ### ⚠️ Vyžaduje pozornost
 - **Velikost .ino** — 3600 řádků / 127 kB v jednom souboru, zvážit rozdělení do modulů

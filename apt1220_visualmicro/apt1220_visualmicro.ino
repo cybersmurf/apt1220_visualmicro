@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.0";
+static String localVersion = "1.0.2.1";
 
 String newVersion = "";
 
@@ -658,7 +658,7 @@ void setup() {
 //#ifdef DEBUG_MODE
 //    printHeapStats("boot");
 //#endif
-    localVersion = "1.0.2.0";
+    //localVersion = "1.0.2.0";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na začátku. Tím zajistíme,
@@ -1370,7 +1370,7 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 saveNewConfigData = true;
                 break;
             }
-            if (buffer2String.equals("DEFAULT")) {
+            if (buffer2String.equals("DEFAULT") || buffer2String.equals("BACKSPACE")) {
                 if (strlen(new_data) > 0) new_data[strlen(new_data) - 1] = '\0';
             }
             else {
@@ -1393,7 +1393,7 @@ void reader_input(const char* display_str, char* data_to_fill) {
                 saveNewConfigData = true;
                 break;
             }
-            if (buffer2String.equals("DEFAULT")) {
+            if (buffer2String.equals("DEFAULT") || buffer2String.equals("BACKSPACE")) {
                 if (strlen(new_data) > 0) new_data[strlen(new_data) - 1] = '\0';
             }
             else {
