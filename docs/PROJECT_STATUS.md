@@ -27,6 +27,8 @@
 - **RTC DS1307** — synchronizace času ze serveru, zobrazení na LCD
 - **FreeRTOS synchronizace** — i2cMutex, tcpMutex, serialDataQueue
 - **Konfigurační vstup** — podpora `DEFAULT` i `BACKSPACE` pro mazání znaků
+- **Stabilita** — Opraven stack overflow v CommandProcessor (zvětšen stack), opraveno STACK_WORDS makro
+- **Deduplikace** — Opraveno náhodné čtení kódů (navrácena robustní verze serialReaderTask)
 
 ### ⚠️ Vyžaduje pozornost
 - **Velikost .ino** — 3600 řádků / 127 kB v jednom souboru, zvážit rozdělení do modulů
@@ -64,12 +66,12 @@
 | Task | Core | Stack | Priorita | Poznámka |
 |---|---|---|---|---|
 | loop() (main) | 1 | default | 1 | TCP, display, file buffer |
-| tSEC_TIMER | 1 | 384 words | 0 | millis() → SEC_TIMER |
-| tLAST_PING | 0 | 2048 words | 1 | TCP heartbeat + reconnect |
-| CommandProcessor | 1 | 768 words | 2 | Zpracování RFID příkazů |
-| SerialC_Reader | 1 | 512 words | 1 | Čtení RFID čtečky C |
-| SerialD_Reader | 1 | 512 words | 1 | Čtení RFID čtečky D |
-| OTATask | 0 | 1024 words | 1 | Kontrola + stahování FW |
+| tSEC_TIMER | 1 | 1536 B | 0 | millis() → SEC_TIMER |
+| tLAST_PING | 0 | 8192 B | 1 | TCP heartbeat + reconnect |
+| CommandProcessor | 1 | 8192 B | 2 | Zpracování RFID příkazů (File IO!) |
+| SerialC_Reader | 1 | 2048 B | 1 | Čtení RFID čtečky C |
+| SerialD_Reader | 1 | 2048 B | 1 | Čtení RFID čtečky D |
+| OTATask | 0 | 4096 B | 1 | Kontrola + stahování FW |
 
 ### TCP protokol (binární)
 - Příkazy: `\x01` echo, `\x02` set time, `\x03` get time, `\x04` worker, `\x05` order, `\x06` operation

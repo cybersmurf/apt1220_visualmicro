@@ -17,6 +17,7 @@ Terminál slouží k evidenci docházky a výrobních operací pomocí RFID čte
 
 ## Funkce
 
+- **Dokumentace** — [Uživatelská příručka (CZ)](docs/MANUAL_CZ.md)
 - **Dual RFID čtečky** — podpora standardních i ID-12 čteček na dvou sériových portech
 - **TCP klient** — binární protokol pro komunikaci s PC serverem (port 54321)
 - **Offline buffer** — při výpadku sítě se data ukládají do LittleFS a automaticky odesílají po obnovení spojení
@@ -98,6 +99,8 @@ Visual Micro nedokáže najít systémový `SHA1Builder.h` z ESP32 core Hash kni
 | `SET-SAVE` | Uložení konfigurace + restart |
 | `SET-LOAD` | Načtení konfigurace |
 | `CONFIG` | Zobrazení konfigurace na LCD |
+| `STORNO` | Zrušení zadávání (bez restartu) |
+| `BACKSPACE` | Smazání posledního znaku |
 | `RESET-BUFFER` | Smazání offline bufferu |
 | `DEFAULT` | Tovární nastavení |
 

@@ -47,7 +47,7 @@
 - Use `snprintf()` instead of `sprintf()` for buffer safety
 - All I2C access (LCD, RTC) must be protected by `i2cMutex`
 - All TCP client access must be protected by `tcpMutex`
-- Use `STACK_WORDS(bytes)` macro for FreeRTOS task stack sizes
+- Use `STACK_WORDS(bytes)` macro (now returns bytes directly for ESP32)
 - Prefer `vTaskDelay(pdMS_TO_TICKS(ms))` over `delay(ms)` in tasks
 - LCD display functions: use `display_line_formated()` / `display_line_unformated()` (mutex-safe), NOT direct `lcd2.printf()`
 - `_fast_clear_disp_unsafe()` = only inside existing mutex lock; `fast_clear_disp()` = safe wrapper with 500ms timeout
@@ -59,7 +59,7 @@
 | loop() (Arduino main) | 1 | default | 1 | TCP(), tDEMOscreen(), send_entire_file_buffer() |
 | tSEC_TIMER | 1 | STACK_WORDS(1536) | 0 | Updates SEC_TIMER from millis() |
 | tLAST_PING | 0 | STACK_WORDS(8192) | 1 | TCP heartbeat ping + reconnect |
-| CommandProcessor | 1 | STACK_WORDS(3072) | 2 | Reads serialDataQueue → calls serial() |
+| CommandProcessor | 1 | STACK_WORDS(8192) | 2 | Reads serialDataQueue → calls serial() (FILE OPS!) |
 | SerialC_Reader | 1 | STACK_WORDS(2048) | 1 | Reads HardwareSerial(1) → serialDataQueue |
 | SerialD_Reader | 1 | STACK_WORDS(2048) | 1 | Reads HardwareSerial(2) → serialDataQueue |
 | OTATask | 0 | STACK_WORDS(4096) | 1 | checkForUpdatesBackground() + performUpdate() |
@@ -219,7 +219,7 @@ loop() detects net_on + file has data
 | Ethernet | LAN8720 (built-in OLIMEX ESP32-POE) |
 
 ## Current Version
-- Firmware: `1.0.1.9`
+- Firmware: `1.0.2.2`
 - Protocol: `4.0.0` (VERZE_PRACANT)
 - OTA check URL: `https://petrsramek.eu/emistr/apt1220/version.txt`
 - OTA firmware URL: `https://petrsramek.eu/emistr/apt1220/firmware.bin`
