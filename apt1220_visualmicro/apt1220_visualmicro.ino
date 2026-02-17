@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.1.9";
+static String localVersion = "1.0.2.0";
 
 String newVersion = "";
 
@@ -260,6 +260,7 @@ SemaphoreHandle_t demoMutex = NULL;
 SemaphoreHandle_t tcpMutex = NULL;
 SemaphoreHandle_t lastPingMutex = NULL;
 SemaphoreHandle_t secTimerMutex = NULL;
+SemaphoreHandle_t fsMutex = NULL;
 
 char c_string2[16] = { 0 };
 
@@ -461,10 +462,21 @@ static void setEthHostnameFromMac() {
 
 
 void reset_buffer_file() {
-    Serial.println("Create buffer file!");
-    createDir(LittleFS, "/apt1220"); // Create a mydir folder
-    //writeFile(LittleFS, "/apt1220/aptbuffer.txt", ""); // Create a hello1.txt file with the content "Hello1"
-    writeFile(LittleFS, bufferFilePath, "");
+    if (fsMutex != NULL) {
+        if (xSemaphoreTake(fsMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+            Serial.println(F("Create buffer file!"));
+            createDir(LittleFS, "/apt1220"); // Create a mydir folder
+            writeFile(LittleFS, bufferFilePath, "");
+            xSemaphoreGive(fsMutex);
+        } else {
+            Serial.println(F("FS Mutex timeout in reset_buffer_file"));
+        }
+    } else {
+        // Fallback if mutex not ready (e.g. early setup)
+        Serial.println(F("Create buffer file (No Mutex)!"));
+        createDir(LittleFS, "/apt1220"); 
+        writeFile(LittleFS, bufferFilePath, "");
+    }
 }
 
 void initializeHardware() {
@@ -646,7 +658,7 @@ void setup() {
 //#ifdef DEBUG_MODE
 //    printHeapStats("boot");
 //#endif
-    localVersion = "1.0.1.9";
+    localVersion = "1.0.2.0";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na začátku. Tím zajistíme,
@@ -1858,85 +1870,31 @@ void serial(char* buffer2, int port) {
             }
             // --- Konec kontroly velikosti ---
 
-            if (!net_on && strchr("D0123456789", buffer2[0])) {
-                //&& ((long)(fifo_end - fifo_last) >= off_buffer_size))
+			if (!net_on && strchr("D0123456789", buffer2[0])) {
+				if (strlen(off_buffer) > 0) {
+					if (append_buffer_to_file(off_buffer)) {
+						// Zobrazit "ULOZENO DO SOUBORU" na LCD
+						if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+							lcd2.setCursor(0, 0);
+							lcd2.printf("*------------------*");
+							lcd2.setCursor(0, 1);
+							lcd2.printf("|     ULOZENO      |");
+							lcd2.setCursor(0, 2);
+							lcd2.printf("|   DO SOUBORU     |");
+							lcd2.setCursor(0, 3);
+							lcd2.printf("*------------------*");
+							xSemaphoreGive(i2cMutex);
+						}
+						saved = 1;
+						timeout1 = SEC_TIMER + timer2;
 
-                //lcd2.printf("%s", buffer2);
-
-                //strncpy((char*)fifo_last, off_buffer, strlen(off_buffer));
-
-                //appendFile(LittleFS, bufferFilePath, tmp);
-                //appendFile(LittleFS, bufferFilePath, off_buffer);
-
-                //fifo_last += strlen(off_buffer) + 1;
-
-                // --- Přidána kontrola velikosti souboru PŘED zápisem ---
-                bool can_write_to_file = false;
-                size_t current_file_size = 0;
-                size_t data_to_add_size = strlen(off_buffer); // Velikost dat, která chceme přidat
-
-                if (data_to_add_size > 0) { // Kontrolujeme jen pokud máme co zapisovat
-                    File bufferFileRead = LittleFS.open(bufferFilePath, FILE_READ); // Otevřít jen pro čtení velikosti
-                    if (bufferFileRead) {
-                        current_file_size = bufferFileRead.size();
-                        bufferFileRead.close(); // Hned zavřít
-
-                        // Zkontrolujeme, zda se nová data vejdou pod limit
-                        if (current_file_size + data_to_add_size < MAX_BUFFER_FILE_SIZE) {
-                            can_write_to_file = true;
-                        }
-                        else {
-                            // Pokud by přidání dat překročilo limit
-                            Serial.printf("CHYBA: Soubor bufferu %s je plny (%u B). Nelze pridat %u B.\n",
-                                bufferFilePath, (unsigned int)current_file_size, (unsigned int)data_to_add_size);
-
-                            // Volitelně: Zobrazit chybu i na LCD
-                            /*
-                            blank_line(0); // Vymažeme řádek 0
-                            lcd2.setCursor(0, 0);
-                            lcd2.print("CHYBA:SOUBOR PLNY!");
-                            */
-
-							display_line_formated("CHYBA: SOUBOR PLNY!", 0);
-                            timeout1 = SEC_TIMER + timer2; // Necháme zprávu viditelnou
-                        }
-                    }
-                    else {
-                        Serial.printf("CHYBA: Nelze otevrit soubor %s pro kontrolu velikosti.\n", bufferFilePath);
-                        // Pokud nelze zjistit velikost, raději nezapisujeme
-                        can_write_to_file = false;
-                    }
-                }
-                else {
-                    // Není co zapisovat (off_buffer je prázdný)
-                    Serial.println(F("DEBUG: off_buffer je prazdny, neni co zapisovat do souboru."));
-                    can_write_to_file = false; // Není potřeba volat appendFile
-                }
-                // --- Konec kontroly velikosti souboru ---
-
-                // --- Zápis do souboru POUZE pokud kontrola prošla ---
-                if (can_write_to_file) {
-                    appendFile(LittleFS, bufferFilePath, off_buffer); // Přidá celý obsah off_buffer na konec souboru
-
-                    // Zobrazit "ULOZENO DO SOUBORU" na LCD
-                    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-                        lcd2.setCursor(0, 0);
-                        lcd2.printf("*------------------*");
-                        lcd2.setCursor(0, 1);
-                        lcd2.printf("|     ULOZENO      |");
-                        lcd2.setCursor(0, 2);
-                        lcd2.printf("|   DO SOUBORU     |");
-                        lcd2.setCursor(0, 3);
-                        lcd2.printf("*------------------*");
-                        xSemaphoreGive(i2cMutex);
-                    }
-                    saved = 1;
-                    timeout1 = SEC_TIMER + timer2;
-
-                    memset(off_buffer, 0x00, sizeof(off_buffer));
-                }
-                // --- Konec zápisu do souboru ---
-            }
+						memset(off_buffer, 0x00, sizeof(off_buffer));
+					} else {
+						 display_line_formated("CHYBA: SOUBOR PLNY!", 0);
+						 timeout1 = SEC_TIMER + timer2;
+					}
+				}
+			}
         }
     }
 
@@ -2688,6 +2646,45 @@ void appendFile(fs::FS& fs, const char* path, const char* message) {
     file.close();
 }
 
+/**
+ * @brief Appends data to the buffer file safely, respecting mutexes and file size limits.
+ * @param data The null-terminated string to append.
+ * @return true if successfully appended, false otherwise (e.g. timeout, file full).
+ */
+bool append_buffer_to_file(const char* data) {
+    if (fsMutex == NULL) {
+        Serial.println(F("FS Mutex not initialized!"));
+        return false;
+    }
+
+    if (xSemaphoreTake(fsMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        Serial.println(F("Failed to acquire FS mutex for appending!"));
+        return false;
+    }
+
+    bool success = false;
+    // Use "a" or FILE_APPEND. LittleFS supports FILE_APPEND.
+    File file = LittleFS.open(bufferFilePath, FILE_APPEND);
+
+    if (file) {
+        if (file.size() + strlen(data) < MAX_BUFFER_FILE_SIZE) {
+            if (file.print(data)) {
+                success = true;
+            } else {
+                Serial.println(F("Failed to write to file"));
+            }
+        } else {
+            Serial.println(F("Buffer file full"));
+        }
+        file.close();
+    } else {
+        Serial.println(F("Failed to open file for appending"));
+    }
+
+    xSemaphoreGive(fsMutex);
+    return success;
+}
+
 
 //************************************************************************
 //************************************************************************
@@ -3387,6 +3384,12 @@ void initializeSyncPrimitives() {
         Serial.println(F("Chyba pri vytvareni Demo mutexu!"));
     }
 
+    // Create mutex for file system access
+    fsMutex = xSemaphoreCreateMutex();
+    if (fsMutex == NULL) {
+        Serial.println(F("Chyba pri vytvareni FS mutexu!"));
+    }
+
     // Create the queue for serial data
     serialDataQueue = xQueueCreate(10, sizeof(SerialData_t));
     if (serialDataQueue == NULL) {
@@ -3396,13 +3399,11 @@ void initializeSyncPrimitives() {
 
 //************************************************************************
 // OPRAVENÁ funkce pro odeslání CELÉHO bufferu ze souboru aptbuffer.txt
-// Verze 4: Opraveno nebezpečné volání isspace().
+// Safe-Swap verze s fsMutex ochranou proti souběžnému zápisu.
 //************************************************************************
 void send_entire_file_buffer() {
-    // 1. Kontrola sítě - pokud nejsme online, nemá smysl pokračovat.
     if (!net_on) return;
 
-    // Rychlá kontrola připojení klienta pomocí mutexu
     bool is_connected = false;
     if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         is_connected = client.connected();
@@ -3410,16 +3411,14 @@ void send_entire_file_buffer() {
     }
     if (!is_connected) return;
 
-    // 2. Kontrola existence a velikosti souboru
     File bufferFile = LittleFS.open(bufferFilePath, FILE_READ);
     if (!bufferFile || bufferFile.size() == 0) {
         if (bufferFile) bufferFile.close();
-        return; // Soubor neexistuje nebo je prázdný, není co dělat.
+        return;
     }
 
-    Serial.println(F(">>> Zahajuji odesilani offline bufferu ze souboru... <<<"));
+    Serial.println(F(">>> Zahajuji odesilani offline bufferu ze souboru (Safe-Swap)... <<<"));
 
-    // Připravíme si dočasný soubor, kam budeme ukládat řádky, které se nepodařilo odeslat.
     String tempFileName = "/apt1220/aptbuffer.tmp";
     File tempFile = LittleFS.open(tempFileName, FILE_WRITE);
     if (!tempFile) {
@@ -3428,9 +3427,8 @@ void send_entire_file_buffer() {
         return;
     }
 
-    bool error_occurred = false; // Flag, který nám řekne, jestli se má původní soubor smazat, nebo nahradit dočasným.
+    bool error_occurred = false;
 
-    // Indikace na LCD displeji
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         _fast_clear_disp_unsafe();
         lcd2.setCursor(0, 0); lcd2.print(F("*------------------*"));
@@ -3440,7 +3438,6 @@ void send_entire_file_buffer() {
         xSemaphoreGive(i2cMutex);
     }
 
-    // 3. Smyčka pro čtení a odeslání všech řádků ze souboru
     while (bufferFile.available()) {
         String lineToSend = bufferFile.readStringUntil('\n');
         if (lineToSend.length() == 0) continue;
@@ -3467,7 +3464,6 @@ void send_entire_file_buffer() {
                 if (bytesRead > 0) {
                     responseBuffer[bytesRead] = '\0';
                     size_t n = strlen(responseBuffer);
-                    // Přetypujeme responseBuffer[n-1] na (unsigned char), abychom předešli pádu.
                     while (n > 0 && isspace((unsigned char)responseBuffer[n - 1])) {
                         responseBuffer[--n] = '\0';
                     }
@@ -3494,30 +3490,46 @@ void send_entire_file_buffer() {
 
             if (!send_success) {
                 setNetOn(0, 22);
-                char copyBuf[128];
-                while (size_t bytesRead = bufferFile.readBytes(copyBuf, sizeof(copyBuf))) {
-                    tempFile.write((uint8_t*)copyBuf, bytesRead);
-                }
                 break;
             }
         }
     }
 
-    bufferFile.close();
-    tempFile.close();
+    // --- CRITICAL SECTION: SWAP FILES ---
+    // Ziskani zamku proti zapisu z druheho tasku (serial)
+    if (xSemaphoreTake(fsMutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
 
-    LittleFS.remove(bufferFilePath);
+        // Pokud mezitim pribyla nova data do bufferFile (stale otevreny), zkopirujeme je
+        while (bufferFile.available()) {
+            size_t bytesRead = bufferFile.readBytes(buffer, sizeof(buffer)); // Reuse global buffer? Or local
+            if (bytesRead > 0) {
+                tempFile.write((uint8_t*)buffer, bytesRead);
+            }
+        }
 
-    if (LittleFS.rename(tempFileName, bufferFilePath)) {
-        if (error_occurred) {
-            Serial.println(F(">>> Odesilani bufferu dokonceno s chybami. Neodeslana data zachovana. <<<"));
+        bufferFile.close();
+        tempFile.close();
+
+        LittleFS.remove(bufferFilePath);
+
+        if (LittleFS.rename(tempFileName, bufferFilePath)) {
+            if (error_occurred) {
+                Serial.println(F(">>> Odesilani dokonceno s chybami. Neodeslana/Nova data zachovana. <<<"));
+            }
+            else {
+                Serial.println(F(">>> Offline buffer uspesne odeslan a vycisten. <<<"));
+            }
+        } else {
+            Serial.println(F("CHYBA: Kriticka chyba pri prejmenovani docasneho souboru!"));
         }
-        else {
-            Serial.println(F(">>> Offline buffer uspesne odeslan a smazan. <<<"));
-        }
-    }
-    else {
-        Serial.println(F("CHYBA: Kriticka chyba pri prejmenovani docasneho souboru!"));
+
+        xSemaphoreGive(fsMutex);
+    } else {
+        Serial.println(F("CHYBA: Timeout fsMutexu pri swapu souboru! Data mohou byt duplicitni."));
+        bufferFile.close();
+        tempFile.close();
+        // V bezpecnem stavu radeji zachovame original a zahodime temp (ktery ma jen castecna data)
+        LittleFS.remove(tempFileName);
     }
 
     timeout1 = 0;
