@@ -1,4 +1,4 @@
-﻿#include <ESPAsyncWebServer.h>
+#include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include "FS.h"
 #include "LittleFS.h"
@@ -37,21 +37,21 @@
 #include "esp_system.h"
 #include "esp_mac.h"
 
-#include "esp_heap_caps.h"   // (nové) na měření HEAPu/DMA
+//#include "esp_heap_caps.h"   // (nové) na měření HEAPu/DMA
 
-// Bluetooth
-#define USE_BLE 0
-
-#define NIMBLE_MAX_CONNECTIONS 1
-#define NIMBLE_MAX_BONDS 0
-#define NIMBLE_MAX_CCCDS 0
-#define CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU 23
-// jen observer mód
-#define CONFIG_BT_NIMBLE_ROLE_OBSERVER 1
-#define CONFIG_BT_NIMBLE_ROLE_CENTRAL  0
-#define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL 0
-#define CONFIG_BT_NIMBLE_ROLE_BROADCASTER 0
-
+// Bluetooth - VYPNUTO
+//#define USE_BLE 0
+//
+//#define NIMBLE_MAX_CONNECTIONS 1
+//#define NIMBLE_MAX_BONDS 0
+//#define NIMBLE_MAX_CCCDS 0
+//#define CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU 23
+//// jen observer mód
+//#define CONFIG_BT_NIMBLE_ROLE_OBSERVER 1
+//#define CONFIG_BT_NIMBLE_ROLE_CENTRAL  0
+//#define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL 0
+//#define CONFIG_BT_NIMBLE_ROLE_BROADCASTER 0
+//
 //#include <NimBLEDevice.h>
 //#include <NimBLEAdvertisedDevice.h>
 
@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.1.8";
+static String localVersion = "1.0.1.9";
 
 String newVersion = "";
 
@@ -285,7 +285,8 @@ TaskHandle_t hSerialDReader = nullptr;
 
 
 
-// ===== BLE helpers =====
+/*
+// ===== BLE helpers ===== VYPNUTO
 #if USE_BLE
 TaskHandle_t hBLEScan = nullptr;       // watermark do tvého debug výpisu
 static volatile uint32_t g_bleSeen = 0;   // kolik adv. rámců jsme zachytili
@@ -340,51 +341,51 @@ void bleScanTask(void* pv) {
     }
 }
 #endif
+*/
 
-// ===== Memory & Task helpers =====
+/*
+// ===== Memory & Task helpers ===== VYPNUTO
 static void printHeapStats(const char* tag) {
-    multi_heap_info_t i8 = {};
-    heap_caps_get_info(&i8, MALLOC_CAP_8BIT);
-    size_t total8 = i8.total_free_bytes + i8.total_allocated_bytes;
-    size_t free8 = i8.total_free_bytes;
-    size_t largest8 = i8.largest_free_block;
-    size_t min8 = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+	multi_heap_info_t i8 = {};
+	heap_caps_get_info(&i8, MALLOC_CAP_8BIT);
+	size_t total8 = i8.total_free_bytes + i8.total_allocated_bytes;
+	size_t free8 = i8.total_free_bytes;
+	size_t largest8 = i8.largest_free_block;
+	size_t min8 = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 
-    size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    size_t largestInt = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+	size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	size_t largestInt = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 
-    size_t freeDMA = heap_caps_get_free_size(MALLOC_CAP_DMA);
-    size_t largestDMA = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+	size_t freeDMA = heap_caps_get_free_size(MALLOC_CAP_DMA);
+	size_t largestDMA = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 
-    Serial.printf("\n===== HEAP STATS (WROOM) — %s =====\n", tag);
-    Serial.printf("8BIT: total=%u, free=%u, min=%u, largest=%u\n",
-        (unsigned)total8, (unsigned)free8, (unsigned)min8, (unsigned)largest8);
-    Serial.printf("INT : free=%u, largest=%u\n",
-        (unsigned)freeInt, (unsigned)largestInt);
-    Serial.printf("DMA : free=%u, largest=%u\n",
-        (unsigned)freeDMA, (unsigned)largestDMA);
-    Serial.printf("Arduino HEAP: free=%u, min=%u, maxAlloc=%u\n",
-        ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+	Serial.printf("\n===== HEAP STATS (WROOM) — %s =====\n", tag);
+	Serial.printf("8BIT: total=%u, free=%u, min=%u, largest=%u\n",
+		(unsigned)total8, (unsigned)free8, (unsigned)min8, (unsigned)largest8);
+	Serial.printf("INT : free=%u, largest=%u\n",
+		(unsigned)freeInt, (unsigned)largestInt);
+	Serial.printf("DMA : free=%u, largest=%u\n",
+		(unsigned)freeDMA, (unsigned)largestDMA);
+	Serial.printf("Arduino HEAP: free=%u, min=%u, maxAlloc=%u\n",
+		ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
 }
 
 static void printTaskWatermarks() {
-    auto pw = [](const char* name, TaskHandle_t h) {
-        if (!h) return;
-        UBaseType_t words = uxTaskGetStackHighWaterMark(h);
-        Serial.printf("Task %-16s | min free stack ~ %u B\n", name, (unsigned)(words * 4));
-    };
-    Serial.println("\n===== TASK STACK WATERMARKS =====");
-    pw("tSEC_TIMER", tSEC_TIMER);
-    pw("tLAST_PING", tLAST_PING);
-    pw("CommandProcessor", hCommandProcessor);
-    pw("SerialC_Reader", hSerialCReader);
-    pw("SerialD_Reader", hSerialDReader);
-    pw("OTATask", otaTaskHandle);
-#if USE_BLE
-    pw("BLE_Scan", hBLEScan);
-#endif
+	auto pw = [](const char* name, TaskHandle_t h) {
+		if (!h) return;
+		UBaseType_t words = uxTaskGetStackHighWaterMark(h);
+		Serial.printf("Task %-16s | min free stack ~ %u B\n", name, (unsigned)(words * 4));
+	};
+	Serial.println("\n===== TASK STACK WATERMARKS =====");
+	pw("tSEC_TIMER", tSEC_TIMER);
+	pw("tLAST_PING", tLAST_PING);
+	pw("CommandProcessor", hCommandProcessor);
+	pw("SerialC_Reader", hSerialCReader);
+	pw("SerialD_Reader", hSerialDReader);
+	pw("OTATask", otaTaskHandle);
 	Serial.println("==================================");
 }
+*/
 
 
 // ===== Access Point (AP) helpers =====
@@ -642,10 +643,10 @@ void loadConfiguration() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-#ifdef DEBUG_MODE
-    printHeapStats("boot");
-#endif
-    localVersion = "1.0.1.8";
+//#ifdef DEBUG_MODE
+//    printHeapStats("boot");
+//#endif
+    localVersion = "1.0.1.9";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na začátku. Tím zajistíme,
@@ -734,14 +735,17 @@ void setup() {
     */
 
     xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(3072), NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, NULL, 1);
-    xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, NULL, 1);
+    //xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, NULL, 1);
+    //xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, NULL, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, &hSerialCReader, 1);
+    xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, &hSerialDReader, 1);
 
-#if USE_BLE
-    // Core 0, nízká priorita; stack měj konzervativně – sleduj HWM a klidně stáhni
-    xTaskCreatePinnedToCore(bleScanTask, "BLE_Scan",
-        STACK_WORDS(4096), nullptr, 0, &hBLEScan, 0);
-#endif
+
+//#if USE_BLE
+//    // Core 0, nízká priorita; stack měj konzervativně – sleduj HWM a klidně stáhni
+//    xTaskCreatePinnedToCore(bleScanTask, "BLE_Scan",
+//        STACK_WORDS(4096), nullptr, 0, &hBLEScan, 0);
+//#endif
 
 
 #ifdef DEBUG_MODE
@@ -752,8 +756,8 @@ void setup() {
     server.begin();
     Serial.println(F("Web server started in debug mode."));
 
-    printHeapStats("end setup");
-    printTaskWatermarks();
+	//printHeapStats("end setup");
+	//printTaskWatermarks();
 	delay(1000);
 #endif
 }
@@ -912,13 +916,10 @@ void _fast_clear_disp_unsafe() {
 }
 
 // "Chytrá" verze - wrapper, který se stará o bezpečnost
+// Timeout 200ms — tDEMOscreen díky double-check uvolní mutex rychle když se změní timeout1
 void fast_clear_disp() {
-    // Vezmeme klíč
-    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-
-        _fast_clear_disp_unsafe(); // Zavoláme "hloupou" funkci
-
-        // Vrátíme klíč
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        _fast_clear_disp_unsafe();
         xSemaphoreGive(i2cMutex);
     }
 }
@@ -1217,7 +1218,7 @@ void resetConfig() {
 	Serial.println(F("TCP client reinitialized"));
 }
 
-void reader_input(const char* display_str, char* data_to_fill) {
+void reader_input_old(const char* display_str, char* data_to_fill) {
     char new_data[16] = "";  // Buffer pro nová data
     char buffer2[100];       // Buffer pro sériový vstup
 
@@ -1313,6 +1314,106 @@ void reader_input(const char* display_str, char* data_to_fill) {
     timeout1 = 0;
 }
 
+void reader_input(const char* display_str, char* data_to_fill) {
+    char new_data[16] = "";
+    char buffer2[100];
+
+    // 1. USPÍME KONKURENCI
+    // Dočasně zastavíme automatické čtení na pozadí, abychom mohli číst přímo my.
+    if (hSerialCReader) vTaskSuspend(hSerialCReader);
+    if (hSerialDReader) vTaskSuspend(hSerialDReader);
+
+    // Vyčistíme bordel v bufferu, co tam mohl zbýt
+    while (SerialC.available()) SerialC.read();
+    while (SerialD.available()) SerialD.read();
+
+    timeout1 = SEC_TIMER + 3600; // Oddálíme překreslení hlavní obrazovky
+
+    // Vykreslení UI (Mutex bereme jen na tuto operaci)
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        _fast_clear_disp_unsafe();
+        lcd2.setCursor(0, 0);
+        lcd2.printf("%s", display_str);
+        lcd2.setCursor(0, 1);
+        lcd2.printf("%s", data_to_fill);
+        lcd2.setCursor(0, 2);
+        lcd2.printf("new:");
+        xSemaphoreGive(i2cMutex); // OKAMŽITĚ VRACÍME MUTEX!
+    }
+
+    while (true) {
+        bool input_processed = false;
+
+        // Čtení SerialC
+        if (SerialC.available() > 0) {
+            int len = SerialC.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
+            buffer2[len] = '\0';
+            String buffer2String = buffer2;
+            buffer2String.trim();
+
+            if (buffer2String.equals("STORNO")) { break; }
+            if (buffer2String.equals("OK")) {
+                strncpy(data_to_fill, new_data, sizeof(new_data) - 1);
+                data_to_fill[sizeof(new_data) - 1] = '\0';
+                saveNewConfigData = true;
+                break;
+            }
+            if (buffer2String.equals("DEFAULT")) {
+                if (strlen(new_data) > 0) new_data[strlen(new_data) - 1] = '\0';
+            }
+            else {
+                strncat(new_data, buffer2String.c_str(), sizeof(new_data) - strlen(new_data) - 1);
+            }
+            input_processed = true;
+        }
+
+        // Čtení SerialD (stejná logika)
+        if (SerialD.available() > 0) {
+            int len = SerialD.readBytesUntil('\n', buffer2, sizeof(buffer2) - 1);
+            buffer2[len] = '\0';
+            String buffer2String = buffer2;
+            buffer2String.trim();
+
+            if (buffer2String.equals("STORNO")) { break; }
+            if (buffer2String.equals("OK")) {
+                strncpy(data_to_fill, new_data, sizeof(new_data) - 1);
+                data_to_fill[sizeof(new_data) - 1] = '\0';
+                saveNewConfigData = true;
+                break;
+            }
+            if (buffer2String.equals("DEFAULT")) {
+                if (strlen(new_data) > 0) new_data[strlen(new_data) - 1] = '\0';
+            }
+            else {
+                strncat(new_data, buffer2String.c_str(), sizeof(new_data) - strlen(new_data) - 1);
+            }
+            input_processed = true;
+        }
+
+        // Překreslení - ZDE ZNOVU BEREME MUTEX jen na chvilku
+        if (input_processed) {
+            if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                lcd2.setCursor(4, 2);
+                lcd2.print("                ");
+                lcd2.setCursor(4, 2);
+                lcd2.print(new_data);
+                xSemaphoreGive(i2cMutex);
+            }
+        }
+
+        // Důležité: Necháme procesor dýchat, aby mohly běžet jiné tasky (WiFi, RTC)
+        // Protože už nedržíme mutex celou dobu, ostatní tasky mohou aktualizovat své věci!
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    // 2. PROBUDÍME KONKURENCI
+    // Vracíme normální provoz
+    if (hSerialCReader) vTaskResume(hSerialCReader);
+    if (hSerialDReader) vTaskResume(hSerialDReader);
+
+    timeout1 = 0;
+}
+
 /*
 
 void reader_input(const char* display_str, char* data_to_fill) {
@@ -1397,7 +1498,10 @@ void serial(char* buffer2, int port) {
     String buffer2String = buffer2;
     buffer2String.trim();
 
-    if ((millis() / 1000) >= timeout1) { _fast_clear_disp_unsafe(); }
+    if ((millis() / 1000) >= timeout1) {
+        timeout1 = SEC_TIMER + 30; // Okamžitě zablokujeme demo screen
+        fast_clear_disp();
+    }
 
     // Zpracování různých příkazů
     //if (strcmp(buffer2String, "SET-IP") == 0) {
@@ -1498,6 +1602,7 @@ void serial(char* buffer2, int port) {
         //} else if (strcmp(buffer2, "CONFIG") == 0 || strcmp(buffer2, "SHOWCONFIG") == 0) {
     }
     else if (buffer2String.equals("CONFIG") || buffer2String.equals("SHOWCONFIG")) {
+        timeout1 = SEC_TIMER + 30; // Zablokujeme demo screen během configu
         menuconfig();
         resetConfig();
         timeout1 = SEC_TIMER + timer2;
@@ -1596,10 +1701,10 @@ void serial(char* buffer2, int port) {
 		menuconfigwifi();
         timeout1 = SEC_TIMER + timer2;
     }
-    else if (buffer2String.equals("HEAP")) {
-        printHeapStats("manual");
-        printTaskWatermarks();
-        }
+    //else if (buffer2String.equals("HEAP")) {
+    //    printHeapStats("manual");
+    //    printTaskWatermarks();
+    //    }
     else if (buffer2String.equals("RESET-BUFFER")) {
         reset_buffer_file();
         /*
@@ -1612,7 +1717,7 @@ void serial(char* buffer2, int port) {
     else {
         timeout1 = SEC_TIMER + timer1;
         if (saved) {
-            _fast_clear_disp_unsafe();
+            fast_clear_disp();
             saved = 0;
         }
 
@@ -1814,14 +1919,17 @@ void serial(char* buffer2, int port) {
                     appendFile(LittleFS, bufferFilePath, off_buffer); // Přidá celý obsah off_buffer na konec souboru
 
                     // Zobrazit "ULOZENO DO SOUBORU" na LCD
-                    lcd2.setCursor(0, 0);
-                    lcd2.printf("*------------------*");
-                    lcd2.setCursor(0, 1);
-                    lcd2.printf("|     ULOZENO      |");
-                    lcd2.setCursor(0, 2);
-                    lcd2.printf("|   DO SOUBORU     |"); // Opravený text
-                    lcd2.setCursor(0, 3);
-                    lcd2.printf("*------------------*");
+                    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+                        lcd2.setCursor(0, 0);
+                        lcd2.printf("*------------------*");
+                        lcd2.setCursor(0, 1);
+                        lcd2.printf("|     ULOZENO      |");
+                        lcd2.setCursor(0, 2);
+                        lcd2.printf("|   DO SOUBORU     |");
+                        lcd2.setCursor(0, 3);
+                        lcd2.printf("*------------------*");
+                        xSemaphoreGive(i2cMutex);
+                    }
                     saved = 1;
                     timeout1 = SEC_TIMER + timer2;
 
@@ -1861,6 +1969,14 @@ void tDEMOscreen() {
 
     // Zkusíme si vzít klíč (mutex). Pokud je obsazený, task tady počká.
     if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+
+    // Double-check: timeout1 se mohl změnit zatímco jsme čekali na mutex
+    // (např. serial() nastavil timeout1 do budoucnosti pro CONFIG/RFID data)
+    if ((millis() / 1000) < (unsigned long)timeout1) {
+        xSemaphoreGive(i2cMutex);
+        return;
+    }
+
     char buffer2[100] = { 0 };
 
     // Zobrazení informací na LCD
@@ -1983,82 +2099,59 @@ void unlockI2C() {
     xSemaphoreGive(i2cMutex);
 }
 
+/*
+// ===== debugHeartbeatTick ===== VYPNUTO (obsahuje heap stats, watermarks, BLE)
 #ifdef DEBUG_MODE
 static uint32_t s_lastDebugTickMs = 0;
 
 static void debugHeartbeatTick() {
-    // Uptime
-    uint32_t up_s = millis() / 1000;
-
-    // Síť a IP
-    bool tcpConn = false;
-    if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        tcpConn = client.connected();
-        xSemaphoreGive(tcpMutex);
-    }
-    IPAddress ip = useETH ? ETH.localIP() : WiFi.localIP();
-
-    // Heap
-    //size_t heap_free = esp_get_free_heap_size();
-    //size_t heap_min_free = esp_get_minimum_free_heap_size();
-    //size_t heap_largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-
-    // Offline buffer – velikost
-    size_t bufSize = 0;
-    File bf = LittleFS.open(bufferFilePath, FILE_READ);
-    if (bf) { bufSize = bf.size(); bf.close(); }
-
-    Serial.println(F("=== DEBUG 20s ==="));
-    Serial.printf("Uptime: %lus\n", (unsigned long)up_s);
-    Serial.printf("Conn: %s  Link:%s  TCP:%s  IP:%s  Server:%s:%d\n",
-        useETH ? "ETH" : "WIFI",
-        useETH ? (ETH.linkUp() ? "UP" : "DOWN") : "-",
-        tcpConn ? "connected" : "no",
-        ip.toString().c_str(),
-        serverIP, serverPort);
-    Serial.printf("net_on:%d  eth_connected:%d  last_ping:%lu  SEC_TIMER:%lu\n",
-        net_on, eth_connected, (unsigned long)last_ping, (unsigned long)SEC_TIMER);
-
-    // Heapy
-    //Serial.printf("Heap free:%u  min:%u  largest:%u (bytes)\n",
-    //    (unsigned)heap_free, (unsigned)heap_min_free, (unsigned)heap_largest);
-    printHeapStats("tick");          // ← jednotný, podrobnější výpis
-    static uint8_t k = 0;
-    if ((++k % 3) == 0)              // třeba každou 3. dávku (1 min)
-		printTaskWatermarks();   // ← jednou za čas, protože je to relativně drahé
-
-    // Stack watermarky (co máme jako handle)
-    if (tLAST_PING) {
-        UBaseType_t w = uxTaskGetStackHighWaterMark(tLAST_PING);
-        Serial.printf("tLAST_PING watermark: %u words (~%u B)\n",
-            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
-    }
-    if (tSEC_TIMER) {
-        UBaseType_t w = uxTaskGetStackHighWaterMark(tSEC_TIMER);
-        Serial.printf("tSEC_TIMER watermark: %u words (~%u B)\n",
-            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
-    }
-    if (otaTaskHandle) {
-        UBaseType_t w = uxTaskGetStackHighWaterMark(otaTaskHandle);
-        Serial.printf("OTATask watermark: %u words (~%u B)\n",
-            (unsigned)w, (unsigned)(w * sizeof(StackType_t)));
-    }
-
-    // Offline soubor
-    Serial.printf("Offline buffer file: %s  size:%u / %u\n",
-        bufferFilePath, (unsigned)bufSize, (unsigned)MAX_BUFFER_FILE_SIZE);
-
-    // MAC info pro jistotu
-    Serial.printf("MAC ETH:%s  STA:%s  active:%s\n",
-        ETH.macAddress().c_str(), WiFi.macAddress().c_str(), activeMAC.c_str());
-
-#if USE_BLE
-    Serial.printf("BLE seen:%lu\n", (unsigned long)g_bleSeen);
-#endif
-
-    Serial.println();
+	uint32_t up_s = millis() / 1000;
+	bool tcpConn = false;
+	if (xSemaphoreTake(tcpMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+		tcpConn = client.connected();
+		xSemaphoreGive(tcpMutex);
+	}
+	IPAddress ip = useETH ? ETH.localIP() : WiFi.localIP();
+	size_t bufSize = 0;
+	File bf = LittleFS.open(bufferFilePath, FILE_READ);
+	if (bf) { bufSize = bf.size(); bf.close(); }
+	Serial.println(F("=== DEBUG 20s ==="));
+	Serial.printf("Uptime: %lus\n", (unsigned long)up_s);
+	Serial.printf("Conn: %s  Link:%s  TCP:%s  IP:%s  Server:%s:%d\n",
+		useETH ? "ETH" : "WIFI",
+		useETH ? (ETH.linkUp() ? "UP" : "DOWN") : "-",
+		tcpConn ? "connected" : "no",
+		ip.toString().c_str(),
+		serverIP, serverPort);
+	Serial.printf("net_on:%d  eth_connected:%d  last_ping:%lu  SEC_TIMER:%lu\n",
+		net_on, eth_connected, (unsigned long)last_ping, (unsigned long)SEC_TIMER);
+	printHeapStats("tick");
+	static uint8_t k = 0;
+	if ((++k % 3) == 0)
+		printTaskWatermarks();
+	if (tLAST_PING) {
+		UBaseType_t w = uxTaskGetStackHighWaterMark(tLAST_PING);
+		Serial.printf("tLAST_PING watermark: %u words (~%u B)\n",
+			(unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+	}
+	if (tSEC_TIMER) {
+		UBaseType_t w = uxTaskGetStackHighWaterMark(tSEC_TIMER);
+		Serial.printf("tSEC_TIMER watermark: %u words (~%u B)\n",
+			(unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+	}
+	if (otaTaskHandle) {
+		UBaseType_t w = uxTaskGetStackHighWaterMark(otaTaskHandle);
+		Serial.printf("OTATask watermark: %u words (~%u B)\n",
+			(unsigned)w, (unsigned)(w * sizeof(StackType_t)));
+	}
+	Serial.printf("Offline buffer file: %s  size:%u / %u\n",
+		bufferFilePath, (unsigned)bufSize, (unsigned)MAX_BUFFER_FILE_SIZE);
+	Serial.printf("MAC ETH:%s  STA:%s  active:%s\n",
+		ETH.macAddress().c_str(), WiFi.macAddress().c_str(), activeMAC.c_str());
+	Serial.println();
 }
 #endif
+*/
 
 
 void loop() {
@@ -2085,13 +2178,13 @@ void loop() {
         tDEMOscreen();
     }
 
-	// Debug heartbeat každých 20 sekund
-    #ifdef DEBUG_MODE
-        if (millis() - s_lastDebugTickMs >= 20000UL) {
-            s_lastDebugTickMs = millis();
-            //debugHeartbeatTick();
-        }
-    #endif
+	// Debug heartbeat - VYPNUTO
+	//#ifdef DEBUG_MODE
+	//    if (millis() - s_lastDebugTickMs >= 20000UL) {
+	//        s_lastDebugTickMs = millis();
+	//        //debugHeartbeatTick();
+	//    }
+	//#endif
 
 
     // Použijeme vTaskDelay pro lepší spolupráci s FreeRTOS.
