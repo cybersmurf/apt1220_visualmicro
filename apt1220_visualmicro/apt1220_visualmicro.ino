@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.1";
+static String localVersion = "1.0.2.2";
 
 String newVersion = "";
 

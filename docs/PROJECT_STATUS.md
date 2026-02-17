@@ -6,7 +6,7 @@
 
 | Položka | Hodnota |
 |---|---|
-| Firmware verze | `1.0.2.1` |
+| Firmware verze | `1.0.2.2` |
 | Protokol verze | `4.0.0` (VERZE_PRACANT) |
 | ESP32 Core | 3.3.7 (ESP-IDF 5.x) |
 | AsyncTCP | 3.4.10 (ESP32Async) |
