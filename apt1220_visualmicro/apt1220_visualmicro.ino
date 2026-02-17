@@ -658,7 +658,7 @@ void setup() {
 //#ifdef DEBUG_MODE
 //    printHeapStats("boot");
 //#endif
-    //localVersion = "1.0.2.0";
+    localVersion = "1.0.2.1";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na začátku. Tím zajistíme,
@@ -779,124 +779,85 @@ void setup() {
  * Tato funkce běží v nekonečné smyčce a je použitelná pro oba sériové porty.
  * Jako parametr dostane ukazatel na HardwareSerial objekt.
  */
-/*
 void serialReaderTask(void* parameter) {
-    HardwareSerial* serialPort = (HardwareSerial*)parameter;
-    int portNumber = (serialPort == &SerialC) ? 1 : 2;
-    SerialData_t receivedData;
-    char processedBuffer[100]; // Buffer for formatted data
+	HardwareSerial* serialPort = (HardwareSerial*)parameter;
+	int portNumber = (serialPort == &SerialC) ? 1 : 2;
+	SerialData_t receivedData;
+	char processedBuffer[100]; // Buffer for formatted data
 
-    for (;;) { // Nekonečná smyčka tasku
-        if (serialPort->available()) {
-            size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
-            if (len > 0) {
-                receivedData.data[len] = '\0';
-                receivedData.port = portNumber;
+	for (;;) { // Nekonečná smyčka tasku
+		if (serialPort->available()) {
+			size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
+			if (len > 0) {
+				receivedData.data[len] = '\0';
+				receivedData.port = portNumber;
 
-                bool dataProcessed = false;
+				bool dataProcessed = false;
 
-                // Logic for Serial Port C
-                if (portNumber == 1) {
-                    if ((len >= 8) && (rfid_reader_c == 1)) {
-                        snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
-                            (unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
-                            (unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
-                            (unsigned char)receivedData.data[7]);
+				// Logic for Serial Port C
+				if (portNumber == 1) {
+					if ((len >= 8) && (rfid_reader_c == 1)) {
+						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
+							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
+							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
+							(unsigned char)receivedData.data[7]);
 
-                        if ((strcmp(rfid_c_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_c_last_time) > 2)) {
-                            rfid_c_last_time = SEC_TIMER;
-                            strcpy(rfid_c_last, processedBuffer);
-                            strcpy(receivedData.data, processedBuffer); // Use the processed data
-                            dataProcessed = true;
-                        }
-                    }
-                    else if ((len >= 11) && (id12_c == 1)) {
-                        // Extracts 10 characters from the 2nd character onwards
-                        memcpy(processedBuffer, &receivedData.data[1], 10);
-                        processedBuffer[10] = '\0';
-                        strcpy(receivedData.data, processedBuffer);
-                        dataProcessed = true;
-                    }
-                }
-                // Logic for Serial Port D
-                else if (portNumber == 2) {
-                    if ((len >= 8) && (rfid_reader_d == 1)) {
-                        snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
-                            (unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
-                            (unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
-                            (unsigned char)receivedData.data[7]);
+						if ((strcmp(rfid_c_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_c_last_time) > 2)) {
+							rfid_c_last_time = SEC_TIMER;
+							strcpy(rfid_c_last, processedBuffer);
+							strcpy(receivedData.data, processedBuffer); // Use the processed data
+							dataProcessed = true;
+						}
+					}
+					else if ((len >= 11) && (id12_c == 1)) {
+						// Extracts 10 characters from the 2nd character onwards
+						memcpy(processedBuffer, &receivedData.data[1], 10);
+						processedBuffer[10] = '\0';
+						strcpy(receivedData.data, processedBuffer);
+						dataProcessed = true;
+					}
+				}
+				// Logic for Serial Port D
+				else if (portNumber == 2) {
+					if ((len >= 8) && (rfid_reader_d == 1)) {
+						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
+							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
+							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
+							(unsigned char)receivedData.data[7]);
 
-                        if ((strcmp(rfid_d_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_d_last_time) > 2)) {
-                            rfid_d_last_time = SEC_TIMER;
-                            strcpy(rfid_d_last, processedBuffer);
-                            strcpy(receivedData.data, processedBuffer);
-                            dataProcessed = true;
-                        }
-                    }
-                    else if ((len >= 11) && (id12_d == 1)) {
-                        memcpy(processedBuffer, &receivedData.data[1], 10);
-                        processedBuffer[10] = '\0';
-                        strcpy(receivedData.data, processedBuffer);
-                        dataProcessed = true;
-                    }
-                }
+						if ((strcmp(rfid_d_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_d_last_time) > 2)) {
+							rfid_d_last_time = SEC_TIMER;
+							strcpy(rfid_d_last, processedBuffer);
+							strcpy(receivedData.data, processedBuffer);
+							dataProcessed = true;
+						}
+					}
+					else if ((len >= 11) && (id12_d == 1)) {
+						memcpy(processedBuffer, &receivedData.data[1], 10);
+						processedBuffer[10] = '\0';
+						strcpy(receivedData.data, processedBuffer);
+						dataProcessed = true;
+					}
+				}
 
-                // If data was not processed by a specific RFID logic, or it was a non-duplicate
-                if (!dataProcessed) {
-                    // For standard commands, just trim and send
-                    String tempData = receivedData.data;
-                    tempData.trim();
-                    strcpy(receivedData.data, tempData.c_str());
-                    dataProcessed = true; // Mark as ready to send
-                }
+				// If data was not processed by a specific RFID logic, or it was a non-duplicate
+				if (!dataProcessed) {
+					// For standard commands, just trim and send
+					String tempData = receivedData.data;
+					tempData.trim();
+					strcpy(receivedData.data, tempData.c_str());
+					dataProcessed = true; // Mark as ready to send
+				}
 
-                if (dataProcessed && strlen(receivedData.data) > 0) {
-                    if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
-                        Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
-                    }
-                }
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-}
-*/
-
-
-void serialReaderTask(void* parameter) {
-    HardwareSerial* serialPort = (HardwareSerial*)parameter;
-    int portNumber = (serialPort == &SerialC) ? 1 : 2;
-    SerialData_t receivedData; // Vytvoříme si strukturu pro data
-
-    for (;;) { // Nekonečná smyčka tasku
-        if (serialPort->available()) {
-            size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
-            if (len > 0) {
-                receivedData.data[len] = '\0'; // Ukončíme řetězec
-                receivedData.port = portNumber;
-
-                if ((len >= 11) && (rfid_reader_c == 1)) {
-					strncpy(receivedData.data, &receivedData.data[1], 10);
-                    receivedData.data[10] = '\n';
-                    receivedData.data[11] = '\0';
-                }
-                if ((len >= 11) && (rfid_reader_d == 1)) {
-                    strncpy(receivedData.data, &receivedData.data[1], 10);
-                    receivedData.data[10] = '\n';
-                    receivedData.data[11] = '\0';
-                }
-                if (len > 2) {
-                    // Pošleme data do fronty. Pokud je fronta plná, počkáme max 100ms.
-                    if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
-                        Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
-                    }
-                }
-            }
-        }
-        // Dáme plánovači šanci, aby se mohl věnovat jiným úlohám.
-        // Task se na 20ms uspí a nežere zbytečně CPU.
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
+				if (dataProcessed && strlen(receivedData.data) > 0) {
+					if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
+						Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
+					}
+				}
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(20));
+	}
 }
 
 
