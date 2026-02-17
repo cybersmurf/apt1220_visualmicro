@@ -109,7 +109,7 @@ HardwareSerial SerialD(2); // Pro SerialD
 
 #define RTC_YEAR_OFFSET  1900
 
-#define STACK_WORDS(bytes) ((bytes) / sizeof(StackType_t))
+#define STACK_WORDS(bytes) (bytes)
 
 //static int __attribute__((section(".noinit"))) loaded_default = 0;
 static int loaded_default = 0;
@@ -746,7 +746,7 @@ void setup() {
     );
     */
 
-    xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(3072), NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(commandProcessorTask, "CommandProcessor", STACK_WORDS(8192), NULL, 2, NULL, 1);
     //xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, NULL, 1);
     //xTaskCreatePinnedToCore(serialReaderTask, "SerialD_Reader", STACK_WORDS(2048), (void*)&SerialD, 1, NULL, 1);
     xTaskCreatePinnedToCore(serialReaderTask, "SerialC_Reader", STACK_WORDS(2048), (void*)&SerialC, 1, &hSerialCReader, 1);
