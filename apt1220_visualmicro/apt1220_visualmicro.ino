@@ -1287,9 +1287,10 @@ void reader_input_old(const char* display_str, char* data_to_fill) {
     timeout1 = 0;
 }
 
-void reader_input(const char* display_str, char* data_to_fill) {
+bool reader_input(const char* display_str, char* data_to_fill) {
     char new_data[16] = "";
     char buffer2[100];
+    bool confirmed = false;
 
     // 1. USPÍME KONKURENCI
     // Dočasně zastavíme automatické čtení na pozadí, abychom mohli číst přímo my.
@@ -1324,11 +1325,12 @@ void reader_input(const char* display_str, char* data_to_fill) {
             String buffer2String = buffer2;
             buffer2String.trim();
 
-            if (buffer2String.equals("STORNO")) { break; }
+            if (buffer2String.equals("STORNO")) { confirmed = false; break; }
             if (buffer2String.equals("OK")) {
                 strncpy(data_to_fill, new_data, sizeof(new_data) - 1);
                 data_to_fill[sizeof(new_data) - 1] = '\0';
                 saveNewConfigData = true;
+                confirmed = true;
                 break;
             }
             if (buffer2String.equals("DEFAULT") || buffer2String.equals("BACKSPACE")) {
@@ -1347,11 +1349,12 @@ void reader_input(const char* display_str, char* data_to_fill) {
             String buffer2String = buffer2;
             buffer2String.trim();
 
-            if (buffer2String.equals("STORNO")) { break; }
+            if (buffer2String.equals("STORNO")) { confirmed = false; break; }
             if (buffer2String.equals("OK")) {
                 strncpy(data_to_fill, new_data, sizeof(new_data) - 1);
                 data_to_fill[sizeof(new_data) - 1] = '\0';
                 saveNewConfigData = true;
+                confirmed = true;
                 break;
             }
             if (buffer2String.equals("DEFAULT") || buffer2String.equals("BACKSPACE")) {
@@ -1385,6 +1388,7 @@ void reader_input(const char* display_str, char* data_to_fill) {
     if (hSerialDReader) vTaskResume(hSerialDReader);
 
     timeout1 = 0;
+    return confirmed;
 }
 
 /*
@@ -1477,30 +1481,33 @@ void serial(char* buffer2, int port) {
     }
 
     // Zpracování různých příkazů
-    //if (strcmp(buffer2String, "SET-IP") == 0) {
-    if (buffer2String.equals("SET-IP")) {
-        if (useDHCP) {
-            char ip_adr2[16];
-            if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
-            else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
-          reader_input("Nastaveni IP DHCP", ip_adr2);
-		  strcpy(ip_adr, ip_adr2);
-		  restartNetwork = true; // Nastavíme flag pro restart sítě
-          //snprintf(buffer, sizeof(buffer), "IP: %s\n", ip_adr2);
-          //Serial.print(buffer);
-		  //lcd2.printf("IP: %s\n", ip_adr2);
-        }
-        else {
-          reader_input("Nastaveni IP", ip_adr);
-          restartNetwork = true; // Nastavíme flag pro restart sítě
+    if (buffer2String.equals("STORNO")) {
+        timeout1 = 0;
+        fast_clear_disp();
+        return; 
+    }
+    else if (buffer2String.equals("SET-IP")) {	if (buffer2String.equals("SET-IP")) {
+		if (useDHCP) {
+			char ip_adr2[16];
+			if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
+			else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
+			if (reader_input("Nastaveni IP DHCP", ip_adr2)) {
+				strcpy(ip_adr, ip_adr2);
+				restartNetwork = true; // Nastavíme flag pro restart sítě
+			}
 		}
-        
+		else {
+			if (reader_input("Nastaveni IP", ip_adr)) {
+				restartNetwork = true; // Nastavíme flag pro restart sítě
+			}
+		}
+
 		Serial.printf("IP: %s\n", ip_adr);
+	}
         //} else if (strcmp(buffer2String, "SET-SERV") == 0) {
     }
     else if (buffer2String.equals("SET-SERV")) {
         reader_input("Nastaveni SERVERU", ip_server);
-        //} else if (strcmp(buffer2String, "SET-OP-C") == 0) {
     }
     else if (buffer2String.equals("SET-OP-C")) {
         reader_input("RFID C", op_c);
@@ -1511,14 +1518,14 @@ void serial(char* buffer2, int port) {
         //} else if (strcmp(buffer2, "SET-GATE") == 0) {
     }
     else if (buffer2String.equals("SET-GATE")) {
-        reader_input("Nastaveni BRANY", ip_gate);
-        restartNetwork = true; // Nastavíme flag pro restart sítě
-        //} else if (strcmp(buffer2, "SET-MASK") == 0) {
+        if (reader_input("Nastaveni BRANY", ip_gate)) {
+            restartNetwork = true; // Nastavíme flag pro restart sítě
+        }
     }
     else if (buffer2String.equals("SET-MASK")) {
-        reader_input("Nastaveni Masky", ip_mask);
-        restartNetwork = true; // Nastavíme flag pro restart sítě
-        //} else if (strcmp(buffer2, "FILL") == 0) {
+        if (reader_input("Nastaveni Masky", ip_mask)) {
+            restartNetwork = true; // Nastavíme flag pro restart sítě
+        }
     }
     else if (buffer2String.equals("FILL")) {
         if (key_maker == 0) {
@@ -1636,15 +1643,17 @@ void serial(char* buffer2, int port) {
     }
     else if (buffer2String.equals("SET-SSID")) {
         //SSID
-        reader_input("Nastavení SSID", ssid);
-        saveNewConfigData = true;
-        restartNetwork = true; // Nastavíme flag pro restart sítě
+        if (reader_input("Nastavení SSID", ssid)) {
+            saveNewConfigData = true;
+            restartNetwork = true; // Nastavíme flag pro restart sítě
+        }
     }
     else if (buffer2String.equals("SET-PASSW")) {
         //SSID PASSWORD 
-        reader_input("Nastavení hesla", password);
-        saveNewConfigData = true;
-        restartNetwork = true; // Nastavíme flag pro restart sítě
+        if (reader_input("Nastavení hesla", password)) {
+            saveNewConfigData = true;
+            restartNetwork = true; // Nastavíme flag pro restart sítě
+        }
     }
     else if (buffer2String.equals("SET-APSSID")) {
         reader_input("AP SSID", ap_ssid);
