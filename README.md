@@ -1,6 +1,9 @@
 # APT1220 — eMISTR Terminál
 
-Firmware pro průmyslový terminál eMISTR postavený na ESP32 (OLIMEX ESP32-POE).  
+![Version](https://img.shields.io/badge/firmware-1.0.2.2-blue)
+![Status](https://img.shields.io/badge/status-production-green)
+
+Firmware pro průmyslový terminál eMISTR postavený na ESP32 (OLIMEX ESP32-POE).
 Terminál slouží k evidenci docházky a výrobních operací pomocí RFID čteček, s online/offline režimem a automatickou synchronizací dat s PC serverem.
 
 ## Hardwarová platforma
@@ -28,15 +31,15 @@ Terminál slouží k evidenci docházky a výrobních operací pomocí RFID čte
 
 ## Architektura (FreeRTOS)
 
-```
+```text
 Core 1 (hlavní)                    Core 0 (pozadí)
-├── loop()                         ├── tLAST_PING  — heartbeat/reconnect
-│   ├── TCP()                      └── OTA Task    — kontrola aktualizací
+├── loop()                         ├── tLAST_PING  (8192 B)
+│   ├── TCP()                      └── OTA Task    (4096 B)
 │   ├── send_entire_file_buffer()
 │   └── tDEMOscreen()
-├── CommandProcessor (pri 2)
-├── SerialC_Reader (pri 1)
-└── SerialD_Reader (pri 1)
+├── CommandProcessor (8192 B)
+├── SerialC_Reader (2048 B)
+└── SerialD_Reader (2048 B)
 ```
 
 **Synchronizační primitiva:**
