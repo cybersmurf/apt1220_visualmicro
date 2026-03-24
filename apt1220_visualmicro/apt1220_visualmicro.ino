@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.2";
+static String localVersion = "1.0.2.3";
 
 String newVersion = "";
 
@@ -794,54 +794,54 @@ void serialReaderTask(void* parameter) {
 				bool send = false;
 
 				if (portNumber == 1) {
-					if (rfid_reader_c == 1 && len >= 8) {
-						// Binární RFID modul → konverze na HEX + deduplikace
-						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
-							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
-							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
-							(unsigned char)receivedData.data[7]);
-						if (strcmp(rfid_c_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_c_last_time) > 2) {
-							rfid_c_last_time = SEC_TIMER;
-							strcpy(rfid_c_last, processedBuffer);
+						if (id12_c == 1 && len >= 11) {
+							// ID-12 ASCII formát: STX + 10 hex znaků + CR + LF → vezmeme znaky [1..10]
+							memcpy(processedBuffer, &receivedData.data[1], 10);
+							processedBuffer[10] = '\0';
 							strcpy(receivedData.data, processedBuffer);
 							send = true;
-						}
-						// duplikát → send zůstane false → zahozeno
-					} else if (id12_c == 1 && len >= 11) {
-						// ID-12 ASCII formát → ořez na 10 znaků
-						memcpy(processedBuffer, &receivedData.data[1], 10);
-						processedBuffer[10] = '\0';
-						strcpy(receivedData.data, processedBuffer);
-						send = true;
-					} else {
-						// Textový příkaz (SET-IP, CONFIG, ...)
-						String t = receivedData.data; t.trim();
-						strcpy(receivedData.data, t.c_str());
-						send = true;
-					}
-				} else if (portNumber == 2) {
-					if (rfid_reader_d == 1 && len >= 8) {
-						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
-							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
-							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
-							(unsigned char)receivedData.data[7]);
-						if (strcmp(rfid_d_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_d_last_time) > 2) {
-							rfid_d_last_time = SEC_TIMER;
-							strcpy(rfid_d_last, processedBuffer);
-							strcpy(receivedData.data, processedBuffer);
+						} else if (rfid_reader_c == 1 && len >= 8) {
+							// Binární RFID modul → bajty [3..7] konvertuj na HEX + deduplikace
+							snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
+								(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
+								(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
+								(unsigned char)receivedData.data[7]);
+							if (strcmp(rfid_c_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_c_last_time) > 2) {
+								rfid_c_last_time = SEC_TIMER;
+								strcpy(rfid_c_last, processedBuffer);
+								strcpy(receivedData.data, processedBuffer);
+								send = true;
+							}
+							// duplikát → send zůstane false → zahozeno
+						} else {
+							// Textový příkaz (SET-IP, CONFIG, ...)
+							String t = receivedData.data; t.trim();
+							strcpy(receivedData.data, t.c_str());
 							send = true;
 						}
-					} else if (id12_d == 1 && len >= 11) {
-						memcpy(processedBuffer, &receivedData.data[1], 10);
-						processedBuffer[10] = '\0';
-						strcpy(receivedData.data, processedBuffer);
-						send = true;
-					} else {
-						String t = receivedData.data; t.trim();
-						strcpy(receivedData.data, t.c_str());
-						send = true;
+					} else if (portNumber == 2) {
+						if (id12_d == 1 && len >= 11) {
+							memcpy(processedBuffer, &receivedData.data[1], 10);
+							processedBuffer[10] = '\0';
+							strcpy(receivedData.data, processedBuffer);
+							send = true;
+						} else if (rfid_reader_d == 1 && len >= 8) {
+							snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
+								(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
+								(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
+								(unsigned char)receivedData.data[7]);
+							if (strcmp(rfid_d_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_d_last_time) > 2) {
+								rfid_d_last_time = SEC_TIMER;
+								strcpy(rfid_d_last, processedBuffer);
+								strcpy(receivedData.data, processedBuffer);
+								send = true;
+							}
+						} else {
+							String t = receivedData.data; t.trim();
+							strcpy(receivedData.data, t.c_str());
+							send = true;
+						}
 					}
-				}
 
 				if (send && strlen(receivedData.data) > 0) {
 					if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
