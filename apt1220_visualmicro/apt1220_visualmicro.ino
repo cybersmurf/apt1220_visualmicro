@@ -783,75 +783,69 @@ void serialReaderTask(void* parameter) {
 	HardwareSerial* serialPort = (HardwareSerial*)parameter;
 	int portNumber = (serialPort == &SerialC) ? 1 : 2;
 	SerialData_t receivedData;
-	char processedBuffer[100]; // Buffer for formatted data
+	char processedBuffer[100];
 
-	for (;;) { // Nekonečná smyčka tasku
+	for (;;) {
 		if (serialPort->available()) {
 			size_t len = serialPort->readBytesUntil('\n', receivedData.data, sizeof(receivedData.data) - 1);
 			if (len > 0) {
 				receivedData.data[len] = '\0';
 				receivedData.port = portNumber;
+				bool send = false;
 
-				bool dataProcessed = false;
-
-				// Logic for Serial Port C
 				if (portNumber == 1) {
-					if ((len >= 8) && (rfid_reader_c == 1)) {
+					if (rfid_reader_c == 1 && len >= 8) {
+						// Binární RFID modul → konverze na HEX + deduplikace
 						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
 							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
 							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
 							(unsigned char)receivedData.data[7]);
-
-						if ((strcmp(rfid_c_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_c_last_time) > 2)) {
+						if (strcmp(rfid_c_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_c_last_time) > 2) {
 							rfid_c_last_time = SEC_TIMER;
 							strcpy(rfid_c_last, processedBuffer);
-							strcpy(receivedData.data, processedBuffer); // Use the processed data
-							dataProcessed = true;
+							strcpy(receivedData.data, processedBuffer);
+							send = true;
 						}
-					}
-					else if ((len >= 11) && (id12_c == 1)) {
-						// Extracts 10 characters from the 2nd character onwards
+						// duplikát → send zůstane false → zahozeno
+					} else if (id12_c == 1 && len >= 11) {
+						// ID-12 ASCII formát → ořez na 10 znaků
 						memcpy(processedBuffer, &receivedData.data[1], 10);
 						processedBuffer[10] = '\0';
 						strcpy(receivedData.data, processedBuffer);
-						dataProcessed = true;
+						send = true;
+					} else {
+						// Textový příkaz (SET-IP, CONFIG, ...)
+						String t = receivedData.data; t.trim();
+						strcpy(receivedData.data, t.c_str());
+						send = true;
 					}
-				}
-				// Logic for Serial Port D
-				else if (portNumber == 2) {
-					if ((len >= 8) && (rfid_reader_d == 1)) {
+				} else if (portNumber == 2) {
+					if (rfid_reader_d == 1 && len >= 8) {
 						snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
 							(unsigned char)receivedData.data[3], (unsigned char)receivedData.data[4],
 							(unsigned char)receivedData.data[5], (unsigned char)receivedData.data[6],
 							(unsigned char)receivedData.data[7]);
-
-						if ((strcmp(rfid_d_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_d_last_time) > 2)) {
+						if (strcmp(rfid_d_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_d_last_time) > 2) {
 							rfid_d_last_time = SEC_TIMER;
 							strcpy(rfid_d_last, processedBuffer);
 							strcpy(receivedData.data, processedBuffer);
-							dataProcessed = true;
+							send = true;
 						}
-					}
-					else if ((len >= 11) && (id12_d == 1)) {
+					} else if (id12_d == 1 && len >= 11) {
 						memcpy(processedBuffer, &receivedData.data[1], 10);
 						processedBuffer[10] = '\0';
 						strcpy(receivedData.data, processedBuffer);
-						dataProcessed = true;
+						send = true;
+					} else {
+						String t = receivedData.data; t.trim();
+						strcpy(receivedData.data, t.c_str());
+						send = true;
 					}
 				}
 
-				// If data was not processed by a specific RFID logic, or it was a non-duplicate
-				if (!dataProcessed) {
-					// For standard commands, just trim and send
-					String tempData = receivedData.data;
-					tempData.trim();
-					strcpy(receivedData.data, tempData.c_str());
-					dataProcessed = true; // Mark as ready to send
-				}
-
-				if (dataProcessed && strlen(receivedData.data) > 0) {
+				if (send && strlen(receivedData.data) > 0) {
 					if (xQueueSend(serialDataQueue, &receivedData, pdMS_TO_TICKS(100)) != pdTRUE) {
-						Serial.printf("CHYBA: Fronta pro seriová data je plná, data z portu %d zahozena!\n", portNumber);
+						Serial.printf("CHYBA: Fronta plna, data z portu %d zahozena!\n", portNumber);
 					}
 				}
 			}
@@ -1486,26 +1480,23 @@ void serial(char* buffer2, int port) {
         fast_clear_disp();
         return; 
     }
-    else if (buffer2String.equals("SET-IP")) {	if (buffer2String.equals("SET-IP")) {
+	else if (buffer2String.equals("SET-IP")) {
 		if (useDHCP) {
 			char ip_adr2[16];
 			if (useETH) { strcpy(ip_adr2, ETH.localIP().toString().c_str()); }
 			else { strcpy(ip_adr2, WiFi.localIP().toString().c_str()); }
 			if (reader_input("Nastaveni IP DHCP", ip_adr2)) {
 				strcpy(ip_adr, ip_adr2);
-				restartNetwork = true; // Nastavíme flag pro restart sítě
+				restartNetwork = true;
 			}
 		}
 		else {
 			if (reader_input("Nastaveni IP", ip_adr)) {
-				restartNetwork = true; // Nastavíme flag pro restart sítě
+				restartNetwork = true;
 			}
 		}
-
 		Serial.printf("IP: %s\n", ip_adr);
 	}
-        //} else if (strcmp(buffer2String, "SET-SERV") == 0) {
-    }
     else if (buffer2String.equals("SET-SERV")) {
         reader_input("Nastaveni SERVERU", ip_server);
     }
