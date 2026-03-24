@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.3";
+static String localVersion = "1.0.2.4";
 
 String newVersion = "";
 
@@ -799,6 +799,13 @@ void serialReaderTask(void* parameter) {
 							memcpy(processedBuffer, &receivedData.data[1], 10);
 							processedBuffer[10] = '\0';
 							strcpy(receivedData.data, processedBuffer);
+							// Nejprve odešli op_c (operaci), pokud je nastavena
+							if (op_c[0] != '\0') {
+								SerialData_t opData;
+								snprintf(opData.data, sizeof(opData.data), "%s", op_c);
+								opData.port = portNumber;
+								xQueueSend(serialDataQueue, &opData, pdMS_TO_TICKS(100));
+							}
 							send = true;
 						} else if (rfid_reader_c == 1 && len >= 8) {
 							// Binární RFID modul → bajty [3..7] konvertuj na HEX + deduplikace
@@ -810,6 +817,13 @@ void serialReaderTask(void* parameter) {
 								rfid_c_last_time = SEC_TIMER;
 								strcpy(rfid_c_last, processedBuffer);
 								strcpy(receivedData.data, processedBuffer);
+								// Nejprve odešli op_c (operaci), pokud je nastavena
+								if (op_c[0] != '\0') {
+									SerialData_t opData;
+									snprintf(opData.data, sizeof(opData.data), "%s", op_c);
+									opData.port = portNumber;
+									xQueueSend(serialDataQueue, &opData, pdMS_TO_TICKS(100));
+								}
 								send = true;
 							}
 							// duplikát → send zůstane false → zahozeno
@@ -824,6 +838,13 @@ void serialReaderTask(void* parameter) {
 							memcpy(processedBuffer, &receivedData.data[1], 10);
 							processedBuffer[10] = '\0';
 							strcpy(receivedData.data, processedBuffer);
+							// Nejprve odešli op_d (operaci), pokud je nastavena
+							if (op_d[0] != '\0') {
+								SerialData_t opData;
+								snprintf(opData.data, sizeof(opData.data), "%s", op_d);
+								opData.port = portNumber;
+								xQueueSend(serialDataQueue, &opData, pdMS_TO_TICKS(100));
+							}
 							send = true;
 						} else if (rfid_reader_d == 1 && len >= 8) {
 							snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
@@ -834,6 +855,13 @@ void serialReaderTask(void* parameter) {
 								rfid_d_last_time = SEC_TIMER;
 								strcpy(rfid_d_last, processedBuffer);
 								strcpy(receivedData.data, processedBuffer);
+								// Nejprve odešli op_d (operaci), pokud je nastavena
+								if (op_d[0] != '\0') {
+									SerialData_t opData;
+									snprintf(opData.data, sizeof(opData.data), "%s", op_d);
+									opData.port = portNumber;
+									xQueueSend(serialDataQueue, &opData, pdMS_TO_TICKS(100));
+								}
 								send = true;
 							}
 						} else {
@@ -3500,48 +3528,55 @@ void send_entire_file_buffer() {
  * @brief Zpracuje surová data ze sériového portu a naformátuje je podle typu čtečky.
  * @param receivedData Ukazatel na strukturu SerialData_t s daty ke zpracování.
  * @return true, pokud mají být data dále odeslána, false pokud mají být zahozeny (např. duplikát).
+ *
+ * POZOR: Tato funkce neposílá op_c/op_d prefix do fronty — to musí obstarat volající
+ * (commandProcessorTask), pokud tuto funkci znovu povolí (odstraní bypass if(1==1)).
+ * Viz serialReaderTask() kde je op_c/op_d odesílání implementováno správně.
  */
- /**
-  * @brief Zpracuje surová data ze sériového portu a naformátuje je podle typu čtečky.
-  * @param receivedData Ukazatel na strukturu SerialData_t s daty ke zpracování.
-  * @return true, pokud mají být data dále odeslána, false pokud mají být zahozeny (např. duplikát).
-  */
 bool processSerialData(SerialData_t* receivedData) {
     char processedBuffer[100];
     size_t len = strlen(receivedData->data);
 
-    // Logic for Serial Port C
+    // Port C
     if (receivedData->port == 1) {
-        if ((len >= 8) && (rfid_reader_c == 1)) {
-            snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
-                (unsigned char)receivedData->data[3], (unsigned char)receivedData->data[4],
-                (unsigned char)receivedData->data[5], (unsigned char)receivedData->data[6],
-                (unsigned char)receivedData->data[7]);
-
-            if ((strcmp(rfid_c_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_c_last_time) > 2)) {
-                rfid_c_last_time = SEC_TIMER;
-                strcpy(rfid_c_last, processedBuffer);
-                strcpy(receivedData->data, processedBuffer);
-                return true; // Data byla zpracována a mají se odeslat
-            }
-            return false; // Duplicitní data, zahodit
-        }
-        else if ((len >= 11) && (id12_c == 1)) {
+        // id12 má prioritu (delší frame, specifický formát) — kontrolujeme PRVNÍ
+        if (id12_c == 1 && len >= 11) {
             memcpy(processedBuffer, &receivedData->data[1], 10);
             processedBuffer[10] = '\0';
             strcpy(receivedData->data, processedBuffer);
             return true;
         }
-    }
-    // Logic for Serial Port D
-    else if (receivedData->port == 2) {
-        if ((len >= 8) && (rfid_reader_d == 1)) {
+        else if (rfid_reader_c == 1 && len >= 8) {
             snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
                 (unsigned char)receivedData->data[3], (unsigned char)receivedData->data[4],
                 (unsigned char)receivedData->data[5], (unsigned char)receivedData->data[6],
                 (unsigned char)receivedData->data[7]);
 
-            if ((strcmp(rfid_d_last, processedBuffer) != 0) || ((long)(SEC_TIMER - rfid_d_last_time) > 2)) {
+            if (strcmp(rfid_c_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_c_last_time) > 2) {
+                rfid_c_last_time = SEC_TIMER;
+                strcpy(rfid_c_last, processedBuffer);
+                strcpy(receivedData->data, processedBuffer);
+                return true;
+            }
+            return false; // Duplicitní data, zahodit
+        }
+    }
+    // Port D
+    else if (receivedData->port == 2) {
+        // id12 má prioritu — kontrolujeme PRVNÍ
+        if (id12_d == 1 && len >= 11) {
+            memcpy(processedBuffer, &receivedData->data[1], 10);
+            processedBuffer[10] = '\0';
+            strcpy(receivedData->data, processedBuffer);
+            return true;
+        }
+        else if (rfid_reader_d == 1 && len >= 8) {
+            snprintf(processedBuffer, sizeof(processedBuffer), "%02X%02X%02X%02X%02X",
+                (unsigned char)receivedData->data[3], (unsigned char)receivedData->data[4],
+                (unsigned char)receivedData->data[5], (unsigned char)receivedData->data[6],
+                (unsigned char)receivedData->data[7]);
+
+            if (strcmp(rfid_d_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_d_last_time) > 2) {
                 rfid_d_last_time = SEC_TIMER;
                 strcpy(rfid_d_last, processedBuffer);
                 strcpy(receivedData->data, processedBuffer);
@@ -3549,33 +3584,13 @@ bool processSerialData(SerialData_t* receivedData) {
             }
             return false; // Duplicitní data, zahodit
         }
-        else if ((len >= 11) && (id12_d == 1)) {
-            memcpy(processedBuffer, &receivedData->data[1], 10);
-            processedBuffer[10] = '\0';
-            strcpy(receivedData->data, processedBuffer);
-            return true;
-        }
     }
 
-    // --- SAFE FALLBACK IMPLEMENTATION ---
-    // This block handles standard commands that are not special RFID formats.
-    // It safely trims whitespace from the start and end of the string.
-    char* start = receivedData->data;
-    while (isspace((unsigned char)*start)) {
-        start++;
-    }
-
-    char* end = receivedData->data + strlen(receivedData->data) - 1;
-    while (end > start && isspace((unsigned char)*end)) {
-        end--;
-    }
-    *(end + 1) = '\0';
-
-    // If the original pointer is different, we need to move the trimmed string
-    // to the beginning of the buffer.
-    if (receivedData->data != start) {
-        memmove(receivedData->data, start, strlen(start) + 1);
-    }
+    // Textový příkaz (SET-IP, CONFIG, ...) — ořežeme whitespace
+    String t = receivedData->data;
+    t.trim();
+    strncpy(receivedData->data, t.c_str(), sizeof(receivedData->data) - 1);
+    receivedData->data[sizeof(receivedData->data) - 1] = '\0';
 
     return strlen(receivedData->data) > 0;
 }
