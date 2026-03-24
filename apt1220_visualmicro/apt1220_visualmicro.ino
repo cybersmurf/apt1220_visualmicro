@@ -658,7 +658,7 @@ void setup() {
 //#ifdef DEBUG_MODE
 //    printHeapStats("boot");
 //#endif
-    localVersion = "1.0.2.1";
+    localVersion = "1.0.2.3";
 
     // KROK 1: INICIALIZACE SYNCHRONIZAČNÍCH PRIMITIV
     // Zavoláme naši novou funkci hned na začátku. Tím zajistíme,
