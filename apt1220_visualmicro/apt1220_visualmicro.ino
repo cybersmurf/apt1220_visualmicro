@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-localVersion = "1.0.2.5";
+localVersion = "1.0.2.6";
 
 String newVersion = "";
 
@@ -798,7 +798,7 @@ void serialReaderTask(void* parameter) {
 							// ID-12 ASCII formát: STX + 10 hex znaků + CR + LF → vezmeme znaky [1..10]
 							memcpy(processedBuffer, &receivedData.data[1], 10);
 							processedBuffer[10] = '\0';
-							snprintf(receivedData.data, sizeof(receivedData.data), "D%s", processedBuffer);
+							strcpy(receivedData.data, processedBuffer);
 							// Nejprve odešli op_c (operaci), pokud je nastavena
 							if (op_c[0] != '\0') {
 								SerialData_t opData;
@@ -816,7 +816,7 @@ void serialReaderTask(void* parameter) {
 							if (strcmp(rfid_c_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_c_last_time) > 2) {
 								rfid_c_last_time = SEC_TIMER;
 								strcpy(rfid_c_last, processedBuffer);
-								snprintf(receivedData.data, sizeof(receivedData.data), "D%s", processedBuffer);
+								strcpy(receivedData.data, processedBuffer);
 								// Nejprve odešli op_c (operaci), pokud je nastavena
 								if (op_c[0] != '\0') {
 									SerialData_t opData;
@@ -837,7 +837,7 @@ void serialReaderTask(void* parameter) {
 						if (id12_d == 1 && len >= 11) {
 							memcpy(processedBuffer, &receivedData.data[1], 10);
 							processedBuffer[10] = '\0';
-							snprintf(receivedData.data, sizeof(receivedData.data), "D%s", processedBuffer);
+							strcpy(receivedData.data, processedBuffer);
 							// Nejprve odešli op_d (operaci), pokud je nastavena
 							if (op_d[0] != '\0') {
 								SerialData_t opData;
@@ -854,7 +854,7 @@ void serialReaderTask(void* parameter) {
 							if (strcmp(rfid_d_last, processedBuffer) != 0 || (long)(SEC_TIMER - rfid_d_last_time) > 2) {
 								rfid_d_last_time = SEC_TIMER;
 								strcpy(rfid_d_last, processedBuffer);
-								snprintf(receivedData.data, sizeof(receivedData.data), "D%s", processedBuffer);
+								strcpy(receivedData.data, processedBuffer);
 								// Nejprve odešli op_d (operaci), pokud je nastavena
 								if (op_d[0] != '\0') {
 									SerialData_t opData;
