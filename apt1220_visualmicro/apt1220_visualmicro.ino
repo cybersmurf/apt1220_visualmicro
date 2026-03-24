@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.6";
+static String localVersion = "1.0.2.7";
 
 String newVersion = "";
 
@@ -995,7 +995,7 @@ boolean load_config() {
     id12_c = preferences.getInt("id12_c", 1);
     id12_d = preferences.getInt("id12_d", 0);
 
-    snprintf(op_c, sizeof(op_c), "%s", preferences.getString("op_c", "A3997").c_str());
+    snprintf(op_c, sizeof(op_c), "%s", preferences.getString("op_c", "").c_str());
 	snprintf(op_d, sizeof(op_d), "%s", preferences.getString("op_d", "").c_str());
 
     useWifi = preferences.getBool("useWifi", false);
@@ -1064,7 +1064,7 @@ void set_default() {
     id12_c = 1;
     id12_d = 0;
 
-    snprintf(op_c, sizeof(op_c), "A3997");
+    snprintf(op_c, sizeof(op_c), "");
 	snprintf(op_d, sizeof(op_d), "");
 
     useDHCP = true;
@@ -1494,6 +1494,10 @@ void serial(char* buffer2, int port) {
 
     String buffer2String = buffer2;
     buffer2String.trim();
+
+    if (buffer2String.length() == 0) {
+        return; // Prázdný vstup (např. CR ze čtečky) — nic neposíláme
+    }
 
     if ((millis() / 1000) >= timeout1) {
         timeout1 = SEC_TIMER + 30; // Okamžitě zablokujeme demo screen
