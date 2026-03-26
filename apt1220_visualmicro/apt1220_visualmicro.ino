@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.7";
+static String localVersion = "1.0.2.9";
 
 String newVersion = "";
 
@@ -827,9 +827,16 @@ void serialReaderTask(void* parameter) {
 							// duplikát → send zůstane false → zahozeno
 						} else {
 							// Textový příkaz (SET-IP, CONFIG, ...)
+							// Odfiltrujeme non-printable znaky (např. ETX 0x03 = druhý frame ID-12)
 							String t = receivedData.data; t.trim();
-							strcpy(receivedData.data, t.c_str());
-							send = true;
+							bool printable = true;
+							for (int i = 0; i < (int)t.length(); i++) {
+								if ((unsigned char)t[i] < 0x20) { printable = false; break; }
+							}
+							if (printable && t.length() > 0) {
+								strcpy(receivedData.data, t.c_str());
+								send = true;
+							}
 						}
 					} else if (portNumber == 2) {
 						if (id12_d == 1 && len >= 11) {
@@ -862,10 +869,19 @@ void serialReaderTask(void* parameter) {
 								}
 								send = true;
 							}
+							// duplikát → send zůstane false → zahozeno
 						} else {
+							// Textový příkaz (SET-IP, CONFIG, ...)
+							// Odfiltrujeme non-printable znaky (např. ETX 0x03 = druhý frame ID-12)
 							String t = receivedData.data; t.trim();
-							strcpy(receivedData.data, t.c_str());
-							send = true;
+							bool printable = true;
+							for (int i = 0; i < (int)t.length(); i++) {
+								if ((unsigned char)t[i] < 0x20) { printable = false; break; }
+							}
+							if (printable && t.length() > 0) {
+								strcpy(receivedData.data, t.c_str());
+								send = true;
+							}
 						}
 					}
 
