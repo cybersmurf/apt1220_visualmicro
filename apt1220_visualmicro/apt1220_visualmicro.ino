@@ -216,7 +216,7 @@ static int efect = 0;
 static unsigned long lastEffectChange = 0;
 
 // Lokální verze firmware
-static String localVersion = "1.0.2.9";
+static String localVersion = "1.0.3.0";
 
 String newVersion = "";
 
@@ -232,8 +232,8 @@ const char* firmwareFTPPassword = "'X9SeQ$+#29d*b7#N'";
 
 // Globální proměnné pro OTA aktualizaci
 TaskHandle_t otaTaskHandle = NULL;
-bool otaInProgress = false;
-bool otaUpdateAvailable = false;
+volatile bool otaInProgress = false;
+volatile bool otaUpdateAvailable = false;
 
 Preferences preferences;
 
@@ -3064,8 +3064,8 @@ void otaUpdateTask(void* parameter) {
     Serial.println("OTA task started");
 
     while (true) {
-        // Kontrola dostupnosti aktualizace
-        if (!otaInProgress) {
+        // Kontrola dostupnosti aktualizace — pouze pokud jsme online
+        if (!otaInProgress && (net_on || eth_connected)) {
             checkForUpdatesBackground();
         }
 
@@ -3105,9 +3105,13 @@ void otaUpdateTask(void* parameter) {
 void checkForUpdatesBackground() {
     Serial.println(F("Kontrola aktualizací na pozadí..."));
 
-    // Stažení souboru s verzí z serveru
+    // Pro HTTPS versionURL potřebujeme WiFiClientSecure
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure(); // Nepožadujeme ověření certifikátu (jednodušší, stejně jako u performUpdateHTTPS)
+    secureClient.setTimeout(10000);
+
     HTTPClient http;
-    http.begin(versionURL);
+    http.begin(secureClient, versionURL);
     http.setTimeout(10000);
 
     // Přidání hlaviček pro simulaci běžného browseru
@@ -3245,7 +3249,7 @@ void setupOTA() {
     );
     */
 
-    xTaskCreatePinnedToCore(otaUpdateTask, "OTATask", STACK_WORDS(4096), NULL, 1, &otaTaskHandle, 0);
+    xTaskCreatePinnedToCore(otaUpdateTask, "OTATask", STACK_WORDS(12288), NULL, 1, &otaTaskHandle, 0);
 
 }
 

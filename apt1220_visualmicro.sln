@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.12.35527.113
+# Visual Studio Version 18
+VisualStudioVersion = 18.4.11506.43 insiders
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "apt1220_visualmicro", "apt1220_visualmicro\apt1220_visualmicro.vcxproj", "{7C9F86C0-1F89-4ADD-AD97-9C27CB34405A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ESP_Async_WebServer-3.10.0", "apt1220_visualmicro\Libraries\ESP_Async_WebServer\3.10.0\ESP_Async_WebServer\ESP_Async_WebServer-3.10.0.vcxitems", "{119632CE-CC2A-4DE4-81C4-D9C10B9E8DAB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,5 +46,12 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {51765950-6EA1-4B1C-91A1-512D20E4D611}
+	EndGlobalSection
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		apt1220_visualmicro\Libraries\ESP_Async_WebServer\3.10.0\ESP_Async_WebServer\ESP_Async_WebServer-3.10.0.vcxitems*{119632ce-cc2a-4de4-81c4-d9c10b9e8dab}*SharedItemsImports = 9
+		apt1220_visualmicro\Libraries\ESP_Async_WebServer\3.10.0\ESP_Async_WebServer\ESP_Async_WebServer-3.10.0.vcxitems*{7c9f86c0-1f89-4add-ad97-9c27cb34405a}*SharedItemsImports = 4
 	EndGlobalSection
 EndGlobal

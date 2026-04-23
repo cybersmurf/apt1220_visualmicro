@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding ="utf-8" ?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" >
+  <PropertyGroup Label="Globals" >
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <ItemsProjectGuid>{119632ce-cc2a-4de4-81c4-d9c10b9e8dab}</ItemsProjectGuid>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectCapability Include="SourceItemsFromImports" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\AsyncEventSource.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\AsyncJson.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\AsyncWebHeader.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\AsyncWebServerRequest.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\AsyncWebSocket.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\BackPort_SHA1Builder.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\ChunkPrint.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\Middleware.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\WebAuthentication.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\WebHandlers.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\WebRequest.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\WebResponses.cpp" />
+<ClCompile Include="$(MSBuildThisFileDirectory)src\WebServer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncEventSource.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncJson.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncMessagePack.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncWebServerLogging.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncWebServerVersion.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\AsyncWebSocket.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\BackPort_SHA1Builder.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\ChunkPrint.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\ESPAsyncWebServer.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\literals.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\WebAuthentication.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\WebHandlerImpl.h" />
+<ClInclude Include="$(MSBuildThisFileDirectory)src\WebResponseImpl.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="$(MSBuildThisFileDirectory)CMakeLists.txt" />
+<Text Include="$(MSBuildThisFileDirectory)library.properties" />
+<Text Include="$(MSBuildThisFileDirectory)pre-commit.requirements.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)CODE_OF_CONDUCT.md" />
+<None Include="$(MSBuildThisFileDirectory)idf_component.yml" />
+<None Include="$(MSBuildThisFileDirectory)library.json" />
+<None Include="$(MSBuildThisFileDirectory)LICENSE" />
+<None Include="$(MSBuildThisFileDirectory)mkdocs.yml" />
+<None Include="$(MSBuildThisFileDirectory)partitions-4MB.csv" />
+<None Include="$(MSBuildThisFileDirectory)platformio.ini" />
+<None Include="$(MSBuildThisFileDirectory)README.md" />
+  </ItemGroup>
+</Project>
